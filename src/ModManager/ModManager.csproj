@@ -21,6 +21,8 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="SimpleBase" Version="2.1.0" />
+    <PackageReference Include="System.Collections.Immutable" Version="10.0.1" />
   </ItemGroup>
 
   <ItemGroup>
