@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace ModManager;
 
 public static class Program
@@ -9,9 +7,25 @@ public static class Program
     {
         NativeMethods.SetProcessDPIAware();
         Application.EnableVisualStyles();
-        using var form = new LauncherForm();
+
+        var services = BuildServiceContainer();
+        var form = services.GetRequiredService<LauncherForm>();
+
         Application.Run(form);
     }
+
+    private static IServiceProvider BuildServiceContainer()
+    {
+        var services = new ServiceCollection();
+        Configure(services);
+        return services.BuildServiceProvider(validateScopes: true);
+    }
+
+    private static void Configure(IServiceCollection services)
+        => services
+            .AddSingleton<LauncherForm>()
+            .AddSingleton<GameDirectoryLocator>()
+            .AddSingleton<GameLauncher>();
 
     private static class NativeMethods
     {

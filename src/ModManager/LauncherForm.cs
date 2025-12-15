@@ -5,9 +5,12 @@ public sealed class LauncherForm : Form
     private const int DefaultMargin = 15;
 
     private readonly Button startButton = new();
+    private readonly GameLauncher launcher;
 
-    public LauncherForm()
+    public LauncherForm(GameLauncher launcher)
     {
+        this.launcher = launcher;
+
         InitializeComponent();
     }
 
@@ -31,6 +34,10 @@ public sealed class LauncherForm : Form
         startButton.Text = "Launch Game";
         startButton.Width = 100;
         startButton.Height = 30;
+
+        launcher.GameLaunched += (s, e) => Invoke(() => startButton.Enabled = false);
+        launcher.GameClosed += (s, e) => Invoke(() => startButton.Enabled = true);
+        startButton.Click += (s, e) => launcher.LaunchGame();
     }
 
     private void OnResize(object? sender, EventArgs e)
