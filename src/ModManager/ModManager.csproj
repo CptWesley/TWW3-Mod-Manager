@@ -23,10 +23,16 @@
     </PackageReference>
     <PackageReference Include="SimpleBase" Version="2.1.0" />
     <PackageReference Include="System.Collections.Immutable" Version="10.0.1" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.6" />
   </ItemGroup>
 
   <ItemGroup>
     <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Dependencies/Facepunch.Steamworks.Win64.dll" HintPath="Absolute_or_Relative_Path_to_DLL" />
+    <None Include="Dependencies/steam_api64.dll" CopyToOutputDirectory="PreserveNewest" Link="steam_api64.dll" />
   </ItemGroup>
 
 </Project>

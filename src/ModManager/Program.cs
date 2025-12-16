@@ -1,3 +1,5 @@
+using Steamworks;
+
 namespace ModManager;
 
 public static class Program
@@ -7,11 +9,14 @@ public static class Program
     {
         NativeMethods.SetProcessDPIAware();
         Application.EnableVisualStyles();
+        var asm = typeof(SteamClient).Assembly.GetManifestResourceNames();
+        SteamClient.Init(Constants.GameId);
 
         var services = BuildServiceContainer();
         var form = services.GetRequiredService<LauncherForm>();
 
         Application.Run(form);
+        SteamClient.Shutdown();
     }
 
     private static IServiceProvider BuildServiceContainer()
