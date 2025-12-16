@@ -34,7 +34,8 @@ public static class Program
             .AddSingleton<GameDirectoryLocator>()
             .AddSingleton<GameLauncher>()
             .AddSingleton<UsedMods>()
-            .AddSingleton<Workshop>();
+            .AddSingleton<Workshop>()
+            .AddSingleton<Playlists>();
 
     private static class NativeMethods
     {

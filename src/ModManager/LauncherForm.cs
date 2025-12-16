@@ -4,12 +4,20 @@ public sealed class LauncherForm : Form
 {
     private const int DefaultMargin = 15;
 
-    private readonly Button startButton = new();
     private readonly GameLauncher launcher;
+    private readonly UsedMods usedMods;
+    private readonly Playlists playlists;
 
-    public LauncherForm(GameLauncher launcher)
+    private readonly Button startButton = new();
+
+    public LauncherForm(
+        GameLauncher launcher,
+        UsedMods usedMods,
+        Playlists playlists)
     {
         this.launcher = launcher;
+        this.usedMods = usedMods;
+        this.playlists = playlists;
 
         InitializeComponent();
     }
@@ -37,7 +45,11 @@ public sealed class LauncherForm : Form
 
         launcher.GameLaunched += (s, e) => Invoke(() => startButton.Enabled = false);
         launcher.GameClosed += (s, e) => Invoke(() => startButton.Enabled = true);
-        startButton.Click += (s, e) => launcher.LaunchGame();
+        startButton.Click += (s, e) =>
+        {
+            //usedMods.Set(null);
+            launcher.LaunchGame();
+        };
     }
 
     private void OnResize(object? sender, EventArgs e)
