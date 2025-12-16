@@ -7,9 +7,11 @@ public static class Program
     [STAThread]
     public static void Main(params string[] args)
     {
+        var exeDirectory = typeof(Program).Assembly.Location;
+        Directory.SetCurrentDirectory(exeDirectory);
+
         NativeMethods.SetProcessDPIAware();
         Application.EnableVisualStyles();
-        var asm = typeof(SteamClient).Assembly.GetManifestResourceNames();
         SteamClient.Init(Constants.GameId);
 
         var services = BuildServiceContainer();
@@ -30,7 +32,9 @@ public static class Program
         => services
             .AddSingleton<LauncherForm>()
             .AddSingleton<GameDirectoryLocator>()
-            .AddSingleton<GameLauncher>();
+            .AddSingleton<GameLauncher>()
+            .AddSingleton<UsedMods>()
+            .AddSingleton<Workshop>();
 
     private static class NativeMethods
     {
