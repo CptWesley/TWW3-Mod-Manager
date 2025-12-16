@@ -39,9 +39,13 @@ public sealed class Workshop
             return null;
         }
 
-        return new()
+        return Convert(item);
+    }
+
+    private WorkshopInfo Convert(Item item)
+        => new ()
         {
-            Id = mod,
+            Id = item.Id.Value,
             Name = item.Title,
             Description = item.Description,
             Image = item.PreviewImageUrl,
@@ -52,6 +56,61 @@ public sealed class Workshop
             IsDownloading = item.IsDownloading || item.IsDownloadPending,
             DownloadProgress = item.DownloadAmount,
         };
+
+    public ImmutableArray<WorkshopInfo> GetSubscribedItems(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = new List<WorkshopInfo>();
+            var seen = new HashSet<ulong>();
+
+            var query = Query
+                .Items
+                .WhereUserSubscribed();
+            var page = 1;
+
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var maybePageResult = query.GetPageAsync(page).GetAwaiter().GetResult();
+
+                if (maybePageResult is not { } pageResult || pageResult.ResultCount <= 0)
+                {
+                    break;
+                }
+
+                var items = pageResult
+                    .Entries
+                    .Select(Convert);
+
+                foreach (var item in items)
+                {
+                    if (seen.Add(item.Id))
+                    {
+                        result.Add(item);
+                    }
+                }
+
+                page++;
+            }
+
+            return result
+                .OrderBy(static item => item.Name)
+                .ThenBy(static item => item.Id)
+                .ToImmutableArray();
+        }
+        catch (Exception)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return [];
+            }
+            else
+            {
+                throw;
+            }
+        }
     }
 }
 

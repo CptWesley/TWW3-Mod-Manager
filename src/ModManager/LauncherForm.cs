@@ -7,30 +7,46 @@ public sealed class LauncherForm : Form
     private readonly GameLauncher launcher;
     private readonly UsedMods usedMods;
     private readonly Playlists playlists;
+    private readonly Workshop workshop;
 
     private readonly Button startButton = new();
+    private readonly ListView unusedList = new();
+    private readonly ListView usedList = new();
+
+    private readonly Thread backgroundWorker;
+
+    private readonly CancellationTokenSource cancellationTokenSource = new();
 
     public LauncherForm(
         GameLauncher launcher,
         UsedMods usedMods,
-        Playlists playlists)
+        Playlists playlists,
+        Workshop workshop)
     {
         this.launcher = launcher;
         this.usedMods = usedMods;
         this.playlists = playlists;
+        this.workshop = workshop;
 
         InitializeComponent();
+
+        backgroundWorker = new(DoBackgroundWork);
+        backgroundWorker.Start();
     }
 
     private void InitializeComponent()
     {
         this.SuspendLayout();
+        this.FormClosing += (s, e) => this.cancellationTokenSource.Cancel();
+        this.FormClosed += (s, e) => this.cancellationTokenSource.Cancel();
         this.Resize += OnResize;
         SetName();
         SetupStartButton();
 
         this.MinimumSize = new(600, 350);
         this.Size = new(1200, 700);
+
+        this.Controls.Add(unusedList);
 
         this.ResumeLayout(true);
     }
@@ -71,5 +87,31 @@ public sealed class LauncherForm : Form
         var name = "CptWesley's Total War Warhammer III Mod Manager";
         this.Text = name;
         this.Name = name;
+    }
+
+    private void DoBackgroundWork()
+    {
+        try
+        {
+            var cancellationToken = cancellationTokenSource.Token;
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                Console.WriteLine("Updating subscribed workshop items...");
+                var mods = workshop.GetSubscribedItems(cancellationToken);
+                Console.WriteLine("Updated subscribed workshop items.");
+                Task.Delay(5_000, cancellationToken).GetAwaiter().GetResult();
+            }
+        }
+        catch (TaskCanceledException)
+        {
+            // Do nothing. Expected.
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        this.cancellationTokenSource.Cancel();
+        base.Dispose(disposing);
     }
 }

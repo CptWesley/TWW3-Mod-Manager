@@ -31,11 +31,28 @@ public sealed class Playlists
         }
     }
 
+    public void Delete(string name)
+    {
+        lock (lck)
+        {
+            map.Remove(name);
+            WriteToDisk();
+        }
+    }
+
     public ImmutableArray<Playlist> Get()
     {
         lock (lck)
         {
             return map.Values.ToImmutableArray();
+        }
+    }
+
+    public Playlist? Get(string name)
+    {
+        lock (lck)
+        {
+            return map.TryGetValue(name, out var result) ? result : null;
         }
     }
 

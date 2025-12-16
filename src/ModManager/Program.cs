@@ -7,7 +7,7 @@ public static class Program
     [STAThread]
     public static void Main(params string[] args)
     {
-        var exeDirectory = typeof(Program).Assembly.Location;
+        var exeDirectory = Path.GetDirectoryName(typeof(Program).Assembly.Location);
         Directory.SetCurrentDirectory(exeDirectory);
 
         NativeMethods.SetProcessDPIAware();
