@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Xml.Linq;
 
 namespace ModManager;
 
@@ -301,13 +302,15 @@ public sealed class LauncherForm : Form
         };
     }
 
+    private bool isBuildingSelectorList = false;
+
     private void SetupPlaylistSelector()
     {
         var label = new Label();
         label.Text = "Playlist:";
 
         var createButton = new Button();
-        createButton.Text = "Create";
+        createButton.Text = "New";
 
         var deleteButton = new Button();
         deleteButton.Text = "Delete";
@@ -341,13 +344,73 @@ public sealed class LauncherForm : Form
             playlistSelector.Width = usedList.Width - label.Width - createButton.Width - deleteButton.Width - DefaultMargin;
         };
 
-        playlistSelector.DropDown += (s, e) =>
+        createButton.Click += (s, e) =>
         {
-            playlistSelector.Items.Clear();
-            
-            foreach (var playlist in playlists.Get())
+            using var nameDialog = new TextInputDialog
             {
-                playlistSelector.Items.Add(playlist.Name);
+                Text = "Confirm New Playlist",
+                Label = "Please enter the name of the new playlist.",
+                Input = "",
+            };
+
+            if (nameDialog.ShowDialog(this) is not DialogResult.OK)
+            {
+                return;
+            }
+
+            var name = nameDialog.Input;
+
+            if (playlists.Get().Any(p => p.Name == name))
+            {
+                using var overwriteDialog = new TextInputDialog
+                {
+                    Text = "Confirm Overwrite Playlist",
+                    Label = $"There is already a playlist with the name '{name}'. Are you sure you want to overwrite it? If you continue the old playlist will be deleted.",
+                    InputVisible = false,
+                };
+
+                if (overwriteDialog.ShowDialog(this) is not DialogResult.OK)
+                {
+                    return;
+                }
+            }
+
+            var copy = playlist with
+            {
+                Name = name,
+            };
+
+            UpdatePlaylist(copy);
+        };
+
+        deleteButton.Click += (s, e) =>
+        {
+            using var dialog = new TextInputDialog
+            {
+                Text = "Confirm Playlist Deletion",
+                Label = $"Are you sure you want to delete the '{playlist.Name}' playlist? This action can not be reverted.",
+                InputVisible = false,
+            };
+
+            if (dialog.ShowDialog(this) is not DialogResult.OK)
+            {
+                return;
+            }
+
+            playlists.Delete(playlist.Name);
+            SetPlaylist(string.Empty);
+        };
+
+        playlistSelector.SelectedValueChanged += (s, e) =>
+        {
+            var index = playlistSelector.SelectedIndex;
+            var value = (string)playlistSelector.Items[index];
+
+            deleteButton.Enabled = !string.IsNullOrEmpty(value);
+
+            if (!isBuildingSelectorList)
+            {
+                SetPlaylist(value);
             }
         };
     }
@@ -522,12 +585,93 @@ public sealed class LauncherForm : Form
         SetPlaylist(modified);
     }
 
+    private void SetPlaylist(string name)
+    {
+        var retrieved = playlists.Get(name);
+        SetPlaylist(retrieved ?? throw new NullReferenceException());
+    }
+
     private void SetPlaylist(Playlist playlist)
     {
         this.playlist = playlist;
         shareCodeBox.Text = playlist.Serialize();
-        playlistSelector.SelectedItem = playlist.Name;
+        UpdatePlaylistSelector();
         UpdateModList();
+    }
+
+    private void UpdatePlaylistSelector()
+    {
+        isBuildingSelectorList = true;
+        playlistSelector.SuspendLayout();
+
+        var all = playlists.Get().OrderBy(p => p.Name).ToArray();
+
+        bool ShouldRebuild()
+        {
+            if (all.Length != playlistSelector.Items.Count)
+            {
+                return true;
+            }
+
+            for (var i = 0; i < all.Length; i++)
+            {
+                var expected = all[i].Name;
+                var found = (string)playlistSelector.Items[i];
+
+                if (expected != found)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        void Rebuild()
+        {
+            playlistSelector.Items.Clear();
+
+            foreach (var p in all)
+            {
+                playlistSelector.Items.Add(p.Name);
+
+                if (p.Name == playlist.Name)
+                {
+                    playlistSelector.SelectedIndex = playlistSelector.Items.Count - 1;
+                }
+            }
+        }
+
+        void Select()
+        {
+            var index = -1;
+            for (var i = 0; i < all.Length; i++)
+            {
+                var mod = all[i];
+                if (mod.Name == playlist.Name)
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index >= 0 && index != playlistSelector.SelectedIndex)
+            {
+                playlistSelector.SelectedIndex = index;
+            }
+        }
+
+        if (ShouldRebuild())
+        {
+            Rebuild();
+        }
+        else
+        {
+            Select();
+        }
+
+        isBuildingSelectorList = false;
+        playlistSelector.ResumeLayout(true);
     }
 
     private void UpdateModList(CancellationToken cancellationToken = default)

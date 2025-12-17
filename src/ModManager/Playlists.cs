@@ -25,6 +25,11 @@ public sealed class Playlists
 
     public void Delete(string name)
     {
+        if (string.IsNullOrEmpty(name))
+        {
+            return;
+        }
+
         lock (lck)
         {
             map.Remove(name);
