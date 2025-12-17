@@ -37,6 +37,7 @@ public sealed class GameLauncher(GameDirectoryLocator gameLocator)
             {
                 WorkingDirectory = gamePath,
                 FileName = Constants.GameExecutableName,
+                Arguments = "used_mods.txt",
             };
 
             process = Process.Start(startInfo);
