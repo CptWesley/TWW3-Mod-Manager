@@ -6,6 +6,8 @@ public delegate void WorkshopItemDownloadProgressEventHandler(ulong id, float pr
 
 public sealed class Workshop
 {
+    private static object lck = new();
+
     public event WorkshopItemDownloadProgressEventHandler? DownloadProgress;
 
     public void Subscribe(PlaylistMod mod)
@@ -13,9 +15,7 @@ public sealed class Workshop
 
     public void Subscribe(ulong mod)
     {
-        var maybeItem = Item.GetAsync(mod).GetAwaiter().GetResult();
-        
-        if (maybeItem is not { } item)
+        if (GetItem(mod) is not { } item)
         {
             return; // TODO handle error
         }
@@ -32,9 +32,7 @@ public sealed class Workshop
 
     public WorkshopInfo? GetInfo(ulong mod)
     {
-        var maybeItem = Item.GetAsync(mod).GetAwaiter().GetResult();
-
-        if (maybeItem is not { } item)
+        if (GetItem(mod) is not { } item)
         {
             return null;
         }
@@ -73,9 +71,7 @@ public sealed class Workshop
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var maybePageResult = query.GetPageAsync(page).GetAwaiter().GetResult();
-
-                if (maybePageResult is not { } pageResult || pageResult.ResultCount <= 0)
+                if (GetPage(query, page) is not { } pageResult)
                 {
                     break;
                 }
@@ -110,6 +106,29 @@ public sealed class Workshop
             {
                 throw;
             }
+        }
+    }
+
+    private static Item? GetItem(ulong id)
+    {
+        lock (lck)
+        {
+            return Item.GetAsync(id).GetAwaiter().GetResult();
+        }
+    }
+
+    private static ResultPage? GetPage(in Query query, int page)
+    {
+        lock (lck)
+        {
+            var maybePageResult = query.GetPageAsync(page).GetAwaiter().GetResult();
+
+            if (maybePageResult is not { } pageResult || pageResult.ResultCount <= 0)
+            {
+                return null;
+            }
+
+            return maybePageResult;
         }
     }
 }

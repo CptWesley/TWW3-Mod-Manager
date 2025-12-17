@@ -19,15 +19,7 @@ public sealed class Playlists
         lock (lck)
         {
             map[playlist.Name] = playlist;
-
-            if (playlist.Name.Length > 0)
-            {
-                WriteToDisk();
-            }
-            else
-            {
-                usedMods.Set(playlist);
-            }
+            WriteToDisk();
         }
     }
 
@@ -63,7 +55,7 @@ public sealed class Playlists
     {
         var sb = new StringBuilder();
 
-        foreach (var playlist in map.Values.Where(static p => p.Name.Length > 0).OrderBy(static p => p.Name))
+        foreach (var playlist in map.Values.OrderBy(static p => p.Name))
         {
             sb.AppendLine(playlist.Serialize());
         }
@@ -75,25 +67,28 @@ public sealed class Playlists
     private void LoadFromDisk()
     {
         map.Clear();
-        var defaultPlaylist = usedMods.GetDefaultPlaylist();
-        AddToMap(defaultPlaylist);
 
-        if (!File.Exists(FileName))
+        if (File.Exists(FileName))
         {
-            return;
+            foreach (var line in File.ReadAllLines(FileName))
+            {
+                try
+                {
+                    var playlist = Playlist.Deserialize(line);
+                    AddToMap(playlist);
+                }
+                catch (Exception e)
+                {
+                    Console.Error.WriteLine(e);
+                }
+            }
         }
 
-        foreach (var line in File.ReadAllLines(FileName))
+        if (!map.ContainsKey(string.Empty))
         {
-            try
-            {
-                var playlist = Playlist.Deserialize(line);
-                AddToMap(playlist);
-            }
-            catch (Exception e)
-            {
-                Console.Error.WriteLine(e);
-            }
+            var defaultPlaylist = usedMods.GetDefaultPlaylist();
+            AddToMap(defaultPlaylist);
+            WriteToDisk();
         }
     }
 }
