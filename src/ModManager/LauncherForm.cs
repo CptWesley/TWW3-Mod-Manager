@@ -888,7 +888,20 @@ public sealed class LauncherForm : Form
             foreach (var entry in idToPlaylist)
             {
                 var id = entry.Key;
-                var info = mods.First(m => m.Id == id);
+                var info = mods.FirstOrDefault(m => m.Id == id)
+                    ?? new()
+                    {
+                        Id = id,
+                        Name = id.ToString(),
+                        Created = default,
+                        Description = string.Empty,
+                        DownloadProgress = 0,
+                        Image = string.Empty,
+                        IsDownloading = false,
+                        IsSubscribed = false,
+                        Owner = string.Empty,
+                        Updated = default,
+                    };
 
                 var status = GetStatus(info);
 
