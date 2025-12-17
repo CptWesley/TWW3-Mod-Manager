@@ -340,6 +340,16 @@ public sealed class LauncherForm : Form
 
             playlistSelector.Width = usedList.Width - label.Width - createButton.Width - deleteButton.Width - DefaultMargin;
         };
+
+        playlistSelector.DropDown += (s, e) =>
+        {
+            playlistSelector.Items.Clear();
+            
+            foreach (var playlist in playlists.Get())
+            {
+                playlistSelector.Items.Add(playlist.Name);
+            }
+        };
     }
 
     private void SetupShareCode()
@@ -516,6 +526,7 @@ public sealed class LauncherForm : Form
     {
         this.playlist = playlist;
         shareCodeBox.Text = playlist.Serialize();
+        playlistSelector.SelectedItem = playlist.Name;
         UpdateModList();
     }
 
