@@ -28,6 +28,13 @@ public sealed class LauncherForm : Form
     private readonly TextBox shareCodeBox = new();
     private readonly ComboBox playlistSelector = new();
 
+    private readonly Label modName = new();
+    private readonly PictureBox modPicture = new();
+    private readonly Label modDescription = new();
+    private readonly Label modCreator = new();
+    private readonly Label modUpdated = new();
+    private readonly Button modSubscribeButton = new();
+
     private readonly Thread backgroundWorker;
 
     private readonly CancellationTokenSource cancellationTokenSource = new();
@@ -64,6 +71,7 @@ public sealed class LauncherForm : Form
         SetupRemoveModbutton();
         SetupPlaylistSelector();
         SetupShareCode();
+        SetupModInfo();
 
         this.MinimumSize = new(600, 350);
         this.Size = new(1200, 700);
@@ -574,6 +582,99 @@ public sealed class LauncherForm : Form
         };
     }
 
+    private void SetupModInfo()
+    {
+        this.Controls.Add(modName);
+        this.Controls.Add(modPicture);
+        this.Controls.Add(modCreator);
+        this.Controls.Add(modUpdated);
+        this.Controls.Add(modDescription);
+        this.Controls.Add(modSubscribeButton);
+
+        modPicture.SizeMode = PictureBoxSizeMode.StretchImage;
+
+        this.Resize += (s, e) =>
+        {
+            modName.Left = usedList.Right + DefaultMargin;
+            modName.Top = DefaultMargin;
+            var potentialWidth = this.ClientSize.Width - modName.Left - DefaultMargin;
+
+            modName.Width = potentialWidth;
+
+            modPicture.Left = modName.Left;
+            modPicture.Top = modName.Bottom;
+
+            var potentialHeight = usedList.Height / 2;
+            var size = Math.Min(potentialWidth, potentialHeight);
+            modPicture.Width = size;
+            modPicture.Height = size;
+
+            modCreator.Left = modName.Left;
+            modCreator.Top = modPicture.Bottom + DefaultMargin;
+            modCreator.Width = potentialWidth / 2;
+
+            modUpdated.Left = modCreator.Right;
+            modUpdated.Top = modCreator.Top;
+            modUpdated.Width = potentialWidth / 2;
+            modUpdated.TextAlign = ContentAlignment.TopRight;
+
+            modDescription.Left = modName.Left;
+            modDescription.Top = modCreator.Bottom + DefaultMargin;
+            modDescription.AutoSize = true;
+            modDescription.MaximumSize = new(potentialWidth, potentialHeight);
+        };
+
+        usedList.SelectedIndexChanged += (s, e) =>
+        {
+            UpdateModInfo();
+        };
+    }
+
+    private void ClearModInfo()
+    {
+        modName.Text = string.Empty;
+        modDescription.Text = string.Empty;
+        modPicture.ImageLocation = null;
+        modCreator.Text = string.Empty;
+        modUpdated.Text = string.Empty;
+        modSubscribeButton.Visible = false;
+        modSubscribeButton.Enabled = false;
+    }
+
+    private void SetModInfo(WorkshopInfo mod)
+    {
+        modName.Text = mod.Name;
+        modDescription.Text = mod.Description;
+
+        if (!string.IsNullOrWhiteSpace(mod.Image))
+        {
+            modPicture.Load(mod.Image.Trim());
+        }
+        else
+        {
+            modPicture.ImageLocation = null;
+        }
+
+        modCreator.Text = $"Author: {mod.Owner}";
+        modUpdated.Text = $"Last updated: {mod.Updated}";
+
+        modSubscribeButton.Visible = true;
+        modSubscribeButton.Enabled = !mod.IsSubscribed;
+    }
+
+    private void UpdateModInfo()
+    {
+        if (usedList.SelectedItems.Count != 1)
+        {
+            ClearModInfo();
+        }
+        else
+        {
+            var selected = usedList.SelectedItems[0];
+            SetModInfo(selected.Annotation);
+        }
+    }
+
     private void AddMod(ulong id, int index)
     {
         var modified = playlist;
@@ -973,6 +1074,7 @@ public sealed class LauncherForm : Form
 
         UpdateUnusedList();
         UpdateUsedList();
+        UpdateModInfo();
     }
 
     private static string GetStatus(WorkshopInfo info)
