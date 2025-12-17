@@ -4,11 +4,36 @@ namespace ModManager;
 
 public sealed record Playlist
 {
+    private const int NewestSerializationFormat = 1;
+
     public required string Name { get; init; }
 
     public required ImmutableArray<PlaylistMod> Mods { get; init; }
 
     public string Serialize()
+        => Serialize(NewestSerializationFormat);
+
+    public string Serialize(int version)
+    {
+        var serialized = SerializeInternal(version);
+        byte[] bytesWithVersion = [1, .. serialized];
+        var ascii85 = Base85.Ascii85.Encode(bytesWithVersion);
+        return ascii85;
+    }
+
+    private ReadOnlySpan<byte> SerializeInternal(int version)
+    {
+        if (version == 1)
+        {
+            return SerializeInternalVersion1();
+        }
+        else
+        {
+            throw new InvalidOperationException($"Unsupported version '{version}'.");
+        }
+    }
+
+    private byte[] SerializeInternalVersion1()
     {
         byte[] bytes;
         using (var ms = new MemoryStream())
@@ -29,10 +54,7 @@ public sealed record Playlist
         }
 
         var compressed = Zstd.Compress(bytes);
-
-        byte[] bytesWithVersion = [1, ..compressed];
-        var ascii85 = Base85.Ascii85.Encode(bytesWithVersion);
-        return ascii85;
+        return compressed.ToArray();
     }
 
     public static Playlist Deserialize(string encoded)
