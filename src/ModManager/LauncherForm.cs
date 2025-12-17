@@ -138,6 +138,22 @@ public sealed class LauncherForm : Form
     }
 
     private bool isBuildingUsedList = false;
+    private bool isTogglingStatusColumn = false;
+
+    private void ToggleStatusColumn(bool enabled)
+    {
+        var column = usedList.Columns[1];
+        var newWidth = enabled ? 90 : 0;
+
+        if (column.Width == newWidth)
+        {
+            return;
+        }
+
+        isTogglingStatusColumn = true;
+        column.Width = newWidth;
+        isTogglingStatusColumn = false;
+    }
 
     private void SetupUsedList()
     {
@@ -170,7 +186,7 @@ public sealed class LauncherForm : Form
         usedList.AutoArrange = false;
         usedList.FullRowSelect = true;
         usedList.Columns.Add(new ColumnHeader() { Text = "Enabled", Width = 60 });
-        usedList.Columns.Add(new ColumnHeader() { Text = "Status", Width = 60 });
+        usedList.Columns.Add(new ColumnHeader() { Text = "Status", Width = 0 });
         usedList.Columns.Add(new ColumnHeader() { Text = "Name", Width = -2 });
 
         usedList.AllowDrop = true;
@@ -274,6 +290,11 @@ public sealed class LauncherForm : Form
 
         usedList.ColumnWidthChanging += (s, e) =>
         {
+            if (!isTogglingStatusColumn)
+            {
+                return;
+            }
+
             e.NewWidth = usedList.Columns[e.ColumnIndex].Width;
             e.Cancel = true;
         };
@@ -936,6 +957,7 @@ public sealed class LauncherForm : Form
             }
 
             startButton.Enabled = ready;
+            ToggleStatusColumn(!ready);
 
             usedListLabel.Text = $"Mods in current playlist ({usedList.Items.Count})";
 
