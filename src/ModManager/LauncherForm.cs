@@ -21,6 +21,8 @@ public sealed class LauncherForm : Form
 
     private readonly AnnotatedListView<WorkshopInfo> unusedList = new();
     private readonly AnnotatedListView<WorkshopInfo> usedList = new();
+    private readonly Label unusedListLabel = new();
+    private readonly Label usedListLabel = new();
 
     private readonly TextBox shareCodeBox = new();
     private readonly ComboBox playlistSelector = new();
@@ -101,8 +103,7 @@ public sealed class LauncherForm : Form
 
     private void SetupUnusedList()
     {
-        var label = new Label();
-        label.Text = "Available mods";
+        var label = unusedListLabel;
 
         this.Controls.Add(label);
         this.Controls.Add(unusedList);
@@ -133,8 +134,7 @@ public sealed class LauncherForm : Form
 
     private void SetupUsedList()
     {
-        var label = new Label();
-        label.Text = "Mods in current playlist";
+        var label = usedListLabel;
 
         this.Controls.Add(label);
         this.Controls.Add(usedList);
@@ -227,9 +227,24 @@ public sealed class LauncherForm : Form
 
         var previousCheckChange = default(DateTime);
 
+        var isBlockingChecking = false;
+
+        usedList.MouseDown += (s, e) =>
+        {
+            if (e.Clicks > 1)
+            {
+
+            }
+        };
+
+        usedList.MouseUp += (s, e) =>
+        {
+
+        };
+
         usedList.ItemCheck += (s, e) =>
         {
-            if (isBuildingUsedList)
+            if (isBuildingUsedList || isBlockingChecking)
             {
                 return;
             }
@@ -248,8 +263,6 @@ public sealed class LauncherForm : Form
             CheckMod(modId, e.NewValue is CheckState.Checked);
             e.NewValue = e.CurrentValue;
         };
-
-
     }
 
     private void SetupAddModButton()
@@ -768,12 +781,14 @@ public sealed class LauncherForm : Form
                 unusedList.Items.Insert(index, new(mod, mod.Name));
             }
 
-            if (unusedList.Items.Count >= 0)
+            if (unusedList.Items.Count > 0)
             {
                 lastTopIndex = Math.Min(lastTopIndex, unusedList.Items.Count - 1);
                 var item = unusedList.Items[lastTopIndex];
                 unusedList.TopItem = item;
             }
+
+            unusedListLabel.Text = $"Available mods ({unusedList.Items.Count})";
 
             unusedList.ResumeLayout(true);
         }
@@ -839,6 +854,8 @@ public sealed class LauncherForm : Form
                 var item = usedList.Items[lastTopIndex];
                 usedList.TopItem = item;
             }
+
+            usedListLabel.Text = $"Mods in current playlist ({usedList.Items.Count})";
 
             isBuildingUsedList = false;
             usedList.ResumeLayout(true);
