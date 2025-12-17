@@ -27,7 +27,7 @@ public sealed class LauncherForm : Form
 
     private readonly CancellationTokenSource cancellationTokenSource = new();
 
-    private Playlist playlist;
+    private Playlist playlist = null!;
 
     public LauncherForm(
         GameLauncher launcher,
@@ -39,8 +39,6 @@ public sealed class LauncherForm : Form
         this.usedMods = usedMods;
         this.playlists = playlists;
         this.workshop = workshop;
-
-        playlist = this.playlists.Get(string.Empty)!;
 
         InitializeComponent();
 
@@ -66,7 +64,7 @@ public sealed class LauncherForm : Form
 
         this.HandleCreated += (s, e) =>
         {
-            UpdateModList();
+            UpdatePlaylist(playlists.Get(string.Empty)!);
         };
 
         this.ResumeLayout(true);

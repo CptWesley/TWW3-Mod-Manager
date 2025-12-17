@@ -31,7 +31,7 @@ public sealed record Playlist
         var compressed = Zstd.Compress(bytes);
 
         byte[] bytesWithVersion = [1, ..compressed];
-        var ascii85 = Base85.Ascii85.Encode(compressed);
+        var ascii85 = Base85.Ascii85.Encode(bytesWithVersion);
         return ascii85;
     }
 
