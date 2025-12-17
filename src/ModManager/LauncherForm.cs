@@ -63,7 +63,7 @@ public sealed class LauncherForm : Form
 
         this.HandleCreated += (s, e) =>
         {
-            UpdatePlaylist(playlists.Get(string.Empty)!);
+            SetPlaylist(playlists.Get(string.Empty)!);
         };
 
         this.ResumeLayout(true);
@@ -452,9 +452,14 @@ public sealed class LauncherForm : Form
 
     private void UpdatePlaylist(Playlist modified)
     {
-        playlist = modified;
+        playlists.Save(modified);
+        SetPlaylist(modified);
+    }
+
+    private void SetPlaylist(Playlist playlist)
+    {
+        this.playlist = playlist;
         shareCodeBox.Text = playlist.Serialize();
-        playlists.Save(playlist);
         UpdateModList();
     }
 
