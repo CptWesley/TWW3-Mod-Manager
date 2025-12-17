@@ -329,6 +329,11 @@ public sealed class LauncherForm : Form
             copyButton.Width = 110;
             copyButton.Height = shareCodeBox.Height;
         };
+
+        copyButton.Click += (s, e) =>
+        {
+            Clipboard.SetText(shareCodeBox.Text);
+        };
     }
 
     private void AddMod(ulong id, int index)
