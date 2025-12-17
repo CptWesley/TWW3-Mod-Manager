@@ -16,6 +16,7 @@ public sealed class LauncherForm : Form
     private readonly Workshop workshop;
 
     private readonly Button startButton = new();
+    private readonly Button subscribeAllButton = new();
 
     private readonly Button addToPlaylistButton = new();
     private readonly Button removeFromPlaylistButton = new();
@@ -34,6 +35,7 @@ public sealed class LauncherForm : Form
     private readonly Label modCreator = new();
     private readonly Label modUpdated = new();
     private readonly Button modSubscribeButton = new();
+    private readonly Button modUnsubscribeButton = new();
 
     private readonly Thread backgroundWorker;
 
@@ -65,6 +67,7 @@ public sealed class LauncherForm : Form
         this.FormClosed += (s, e) => this.cancellationTokenSource.Cancel();
         SetName();
         SetupStartButton();
+        SetupSubscribeAllButton();
         SetupUnusedList();
         SetupUsedList();
         SetupAddModButton();
@@ -87,7 +90,7 @@ public sealed class LauncherForm : Form
     private void SetupStartButton()
     {
         this.Controls.Add(this.startButton);
-        startButton.Enabled = true;
+        startButton.Enabled = false;
         startButton.Text = "Launch Game";
         startButton.Width = 100;
         startButton.Height = 30;
@@ -107,6 +110,31 @@ public sealed class LauncherForm : Form
         {
             usedMods.Set(playlist);
             launcher.LaunchGame();
+        };
+    }
+
+    private void SetupSubscribeAllButton()
+    {
+        this.Controls.Add(this.subscribeAllButton);
+        subscribeAllButton.Enabled = false;
+        subscribeAllButton.Text = "Subscribe All";
+        subscribeAllButton.Width = 100;
+        subscribeAllButton.Height = 30;
+
+        this.Resize += (s, e) =>
+        {
+            subscribeAllButton.Top = startButton.Top;
+            subscribeAllButton.Left = startButton.Left - subscribeAllButton.Width - DefaultMargin;
+        };
+
+        subscribeAllButton.Click += (s, e) =>
+        {
+            var ids = usedList
+                .Items
+                .Where(m => m.Checked && !m.Annotation.IsSubscribed)
+                .Select(m => m.Annotation.Id)
+                .ToArray();
+            _ = SubscribeToMods(ids);
         };
     }
 
@@ -590,10 +618,14 @@ public sealed class LauncherForm : Form
         this.Controls.Add(modUpdated);
         this.Controls.Add(modDescription);
         this.Controls.Add(modSubscribeButton);
+        this.Controls.Add(modUnsubscribeButton);
 
         modPicture.SizeMode = PictureBoxSizeMode.StretchImage;
         modSubscribeButton.Text = "Subscribe";
         modSubscribeButton.Visible = false;
+
+        modUnsubscribeButton.Text = "Unsubscribe";
+        modUnsubscribeButton.Visible = false;
 
         this.Resize += (s, e) =>
         {
@@ -629,12 +661,59 @@ public sealed class LauncherForm : Form
             modSubscribeButton.Width = 100;
             modSubscribeButton.Height = 30;
             modSubscribeButton.Top = modDescription.Bottom + DefaultMargin;
+
+            modUnsubscribeButton.Left = modSubscribeButton.Right + DefaultMargin;
+            modUnsubscribeButton.Width = 100;
+            modUnsubscribeButton.Height = 30;
+            modUnsubscribeButton.Top = modSubscribeButton.Top;
         };
 
         usedList.SelectedIndexChanged += (s, e) =>
         {
             UpdateModInfo();
         };
+
+        modSubscribeButton.Click += (s, e) =>
+        {
+            var selected = usedList.SelectedItems[0];
+            _ = SubscribeToMods(selected.Annotation.Id);
+        };
+
+        modUnsubscribeButton.Click += (s, e) =>
+        {
+            var selected = usedList.SelectedItems[0];
+            _ = UnsubscribeFromMods(selected.Annotation.Id);
+        };
+    }
+
+    private async Task SubscribeToMods(params ulong[] ids)
+    {
+        if (ids.Length <= 0)
+        {
+            return;
+        }
+
+        foreach (var id in ids)
+        {
+            await workshop.Subscribe(id);
+        }
+
+        await UpdateModListAsync();
+    }
+
+    private async Task UnsubscribeFromMods(params ulong[] ids)
+    {
+        if (ids.Length <= 0)
+        {
+            return;
+        }
+
+        foreach (var id in ids)
+        {
+            await workshop.Unsubscribe(id);
+        }
+
+        await UpdateModListAsync();
     }
 
     private void ClearModInfo()
@@ -646,6 +725,8 @@ public sealed class LauncherForm : Form
         modUpdated.Text = string.Empty;
         modSubscribeButton.Visible = false;
         modSubscribeButton.Enabled = false;
+        modUnsubscribeButton.Visible = false;
+        modUnsubscribeButton.Enabled = false;
     }
 
     private void SetModInfo(WorkshopInfo mod)
@@ -668,6 +749,10 @@ public sealed class LauncherForm : Form
         modSubscribeButton.Visible = true;
         modSubscribeButton.Enabled = !mod.IsSubscribed;
         modSubscribeButton.Top = modDescription.Bottom + DefaultMargin;
+
+        modUnsubscribeButton.Visible = true;
+        modUnsubscribeButton.Enabled = mod.IsSubscribed;
+        modUnsubscribeButton.Top = modSubscribeButton.Top;
     }
 
     private void UpdateModInfo()
@@ -1072,6 +1157,7 @@ public sealed class LauncherForm : Form
             }
 
             startButton.Enabled = ready;
+            subscribeAllButton.Enabled = !ready;
             ToggleStatusColumn(showStatus);
 
             usedListLabel.Text = $"Mods in current playlist ({usedList.Items.Count})";

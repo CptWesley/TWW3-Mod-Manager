@@ -35,6 +35,27 @@ public sealed class Workshop
             .ConfigureAwait(false);
     }
 
+    public async Task Unsubscribe(PlaylistMod mod, CancellationToken cancellationToken = default)
+    => await Unsubscribe(mod.Id, cancellationToken).ConfigureAwait(false);
+
+    public async Task Unsubscribe(ulong mod, CancellationToken cancellationToken = default)
+    {
+        _ = await GetItemInternal<object?>(
+            id: mod,
+            map: async maybeItem =>
+            {
+                if (maybeItem is not { } item)
+                {
+                    return null; // TODO handle error
+                }
+
+                await item.Unsubscribe().ConfigureAwait(false);
+                return null;
+            },
+            cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<WorkshopInfo?> GetInfo(PlaylistMod mod, CancellationToken cancellationToken = default)
         => await GetInfo(mod.Id, cancellationToken).ConfigureAwait(false);
 
