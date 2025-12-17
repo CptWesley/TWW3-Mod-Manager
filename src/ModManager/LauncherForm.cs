@@ -1,15 +1,11 @@
+using System;
 using System.Drawing;
-using System.Reflection;
-using System.Threading;
-using System.Windows.Forms;
 
 namespace ModManager;
 
 public sealed class LauncherForm : Form
 {
     private const int DefaultMargin = 15;
-
-    private readonly object updateModListLock = new();
 
     private readonly GameLauncher launcher;
     private readonly UsedMods usedMods;
@@ -42,7 +38,7 @@ public sealed class LauncherForm : Form
         InitializeComponent();
 
         backgroundWorker = new(DoBackgroundWork);
-        //backgroundWorker.Start();
+        backgroundWorker.Start();
     }
 
     private void InitializeComponent()
@@ -83,8 +79,8 @@ public sealed class LauncherForm : Form
             startButton.Top = height - startButton.Height - DefaultMargin;
         };
 
-        launcher.GameLaunched += (s, e) => Invoke(() => startButton.Enabled = false);
-        launcher.GameClosed += (s, e) => Invoke(() => startButton.Enabled = true);
+        launcher.GameLaunched += (s, e) => Delegate(() => startButton.Enabled = false);
+        launcher.GameClosed += (s, e) => Delegate(() => startButton.Enabled = true);
         startButton.Click += (s, e) =>
         {
             usedMods.Set(playlist);
@@ -136,73 +132,91 @@ public sealed class LauncherForm : Form
         usedList.Columns.Add(new ColumnHeader() { Text = "Enabled", Width = 60 });
         usedList.Columns.Add(new ColumnHeader() { Text = "Name", Width = -2 });
 
-        AnnotatedListViewItem<WorkshopInfo>? movingItem = null;
-
         usedList.AllowDrop = true;
-        usedList.MouseDown += (s, e) =>
+        usedList.ItemDrag += (s, e) =>
         {
-            movingItem = usedList.GetItemAt(e.X, e.Y);
+            usedList.DoDragDrop(e.Item, DragDropEffects.Move);
+        };
+        usedList.DragEnter += (s, e) =>
+        {
+            e.Effect = e.AllowedEffect;
+        };
+        usedList.DragOver += (s, e) =>
+        {
+            var targetPoint = usedList.PointToClient(new Point(e.X, e.Y));
+            var targetIndex = usedList.InsertionMark.NearestIndex(targetPoint);
 
-            if (movingItem is null)
+            if (targetIndex >= 0)
+            {
+                var itemBounds = usedList.GetItemRect(targetIndex);
+                if (targetPoint.Y > itemBounds.Top + (itemBounds.Height / 2))
+                {
+                    usedList.InsertionMark.AppearsAfterItem = true;
+                }
+                else
+                {
+                    usedList.InsertionMark.AppearsAfterItem = false;
+                }
+            }
+
+            usedList.InsertionMark.Index = targetIndex;
+        };
+        usedList.DragLeave += (s, e) =>
+        {
+            usedList.InsertionMark.Index = -1;
+        };
+        usedList.DragDrop += (s, e) =>
+        {
+            var targetIndex = usedList.InsertionMark.Index;
+
+            // If the insertion mark is not visible, exit the method.
+            if (targetIndex == -1)
             {
                 return;
             }
 
-            usedList.DoDragDrop(movingItem, DragDropEffects.Move);
-        };
-        usedList.DragOver += (s, e) =>
-        {
-            e.Effect = DragDropEffects.Move;
-        };
-        usedList.DragDrop += (s, e) =>
-        {
-            lock (updateModListLock)
+            // If the insertion mark is to the right of the item with
+            // the corresponding index, increment the target index.
+            if (usedList.InsertionMark.AppearsAfterItem)
             {
-                if (movingItem is null)
-                {
-                    return;
-                }
-
-                var modId = movingItem.Annotation.Id;
-
-                var localPoint = usedList.PointToClient(new Point(e.X, e.Y));
-                var target = usedList.GetItemAt(localPoint.X, localPoint.Y);
-                var newIndex = target?.Index ?? usedList.Items.Count - 1;
-
-                AddMod(modId, newIndex);
+                targetIndex++;
             }
+
+            usedList.InsertionMark.Index = -1;
+
+            var draggedItem =
+                (AnnotatedListViewItem<WorkshopInfo>)e.Data.GetData(typeof(AnnotatedListViewItem<WorkshopInfo>));
+
+            var modId = draggedItem.Annotation.Id;
+
+            AddMod(modId, targetIndex);
         };
 
-        var prev = default(DateTime);
-        var prevSender = default(object);
-        var prevEvent = default(ItemCheckEventArgs);
+        var previousCheckChange = default(DateTime);
 
         usedList.ItemCheck += (s, e) =>
         {
-            lock (updateModListLock)
+            if (isBuildingUsedList)
             {
-                if (isBuildingUsedList)
-                {
-                    return;
-                }
-
-                var now = DateTime.UtcNow;
-                if (now - prev < TimeSpan.FromMilliseconds(100))
-                {
-                    e.NewValue = e.CurrentValue;
-                    return;
-                }
-
-                prev = now;
-                prevSender = s;
-                prevEvent = e;
-
-                var item = usedList.Items[e.Index];
-                var modId = item.Annotation.Id;
-                CheckMod(modId, e.NewValue is CheckState.Checked);
-                e.NewValue = e.CurrentValue;
+                return;
             }
+
+            var now = DateTime.UtcNow;
+            if (now - previousCheckChange < TimeSpan.FromMilliseconds(100))
+            {
+                e.NewValue = e.CurrentValue;
+                return;
+            }
+
+            previousCheckChange = now;
+
+            var item = usedList.Items[e.Index];
+            var modId = item.Annotation.Id;
+            CheckMod(modId, e.NewValue is CheckState.Checked);
+            e.NewValue = e.CurrentValue;
         };
+
+
     }
 
     private void AddMod(ulong id, int index)
@@ -228,13 +242,17 @@ public sealed class LauncherForm : Form
         else
         {
             var mod = modified.Mods[oldIndex];
-            var insertOffset = index > oldIndex ? 0 : 0;
+
+            if (index > oldIndex)
+            {
+                index--;
+            }
 
             modified = modified with
             {
                 Mods = modified.Mods
                     .RemoveAt(oldIndex)
-                    .Insert(index + insertOffset, mod),
+                    .Insert(index, mod),
             };
         }
 
@@ -281,45 +299,43 @@ public sealed class LauncherForm : Form
 
     private void UpdateModList(CancellationToken cancellationToken = default)
     {
-        lock (updateModListLock)
-        {
-            Console.WriteLine("Updating subscribed workshop items...");
-            var subscribedMods = workshop.GetSubscribedItems(cancellationToken);
-            var unsubscribedMods = playlist.Mods
-                .Where(pm => !subscribedMods.Any(sm => sm.Id == pm.Id))
-                .Select(pm =>
+        Console.WriteLine("Updating subscribed workshop items...");
+        var subscribedMods = workshop.GetSubscribedItems(cancellationToken);
+        var unsubscribedMods = playlist.Mods
+            .Where(pm => !subscribedMods.Any(sm => sm.Id == pm.Id))
+            .Select(pm =>
+            {
+                if (workshop.GetInfo(pm) is { } info)
                 {
-                    if (workshop.GetInfo(pm) is { } info)
-                    {
-                        return info;
-                    }
+                    return info;
+                }
 
-                    return new()
-                    {
-                        Created = default,
-                        Description = "",
-                        DownloadProgress = 0,
-                        Id = pm.Id,
-                        Image = "",
-                        IsDownloading = false,
-                        IsSubscribed = false,
-                        Name = $"Unknown mod [{pm.Id}]",
-                        Owner = "",
-                        Updated = default,
-                    };
-                })
-                .ToImmutableArray();
-            var mods = subscribedMods.AddRange(unsubscribedMods);
-            //Invoke(() => UpdateModList(subscribedMods));
-            UpdateModList(subscribedMods);
-            Console.WriteLine("Updated subscribed workshop items.");
-        }
+                return new()
+                {
+                    Created = default,
+                    Description = "",
+                    DownloadProgress = 0,
+                    Id = pm.Id,
+                    Image = "",
+                    IsDownloading = false,
+                    IsSubscribed = false,
+                    Name = $"Unknown mod [{pm.Id}]",
+                    Owner = "",
+                    Updated = default,
+                };
+            })
+            .ToImmutableArray();
+        var mods = subscribedMods.AddRange(unsubscribedMods);
+        Delegate(() => UpdateModList(subscribedMods));
+        Console.WriteLine("Updated subscribed workshop items.");
     }
 
     private void UpdateModList(ImmutableArray<WorkshopInfo> mods)
     {
         void UpdateUnusedList()
         {
+            unusedList.SuspendLayout();
+
             var lastTopIndex = unusedList.TopItem?.Index ?? 0;
 
             var toAdd = new Dictionary<ulong, WorkshopInfo>();
@@ -381,31 +397,64 @@ public sealed class LauncherForm : Form
                 var item = unusedList.Items[lastTopIndex];
                 unusedList.TopItem = item;
             }
+
+            unusedList.ResumeLayout(true);
         }
 
         void UpdateUsedList()
         {
-            Console.WriteLine("START");
+            usedList.SuspendLayout();
             isBuildingUsedList = true;
 
             var lastTopIndex = usedList.TopItem?.Index ?? 0;
 
-            usedList.Items.Clear();
+            var idToPlaylist = new Dictionary<ulong, (PlaylistMod Mod, int Index)>();
+            var idToListView = new Dictionary<ulong, AnnotatedListViewItem<WorkshopInfo>>();
 
-            foreach (var mod in playlist.Mods)
+            for (var i = 0; i < playlist.Mods.Length; i++)
             {
-                if (playlist.Mods.Where(x => !x.Enabled).Count() >= 2)
-                {
+                var mod = playlist.Mods[i];
+                idToPlaylist[mod.Id] = (mod, i);
+            }
 
+            for (var i = 0; i < usedList.Items.Count; i++)
+            {
+                var item = usedList.Items[i];
+                idToListView[item.Annotation.Id] = item;
+            }
+
+            foreach (var entry in idToListView)
+            {
+                var id = entry.Key;
+                if (!idToPlaylist.ContainsKey(id))
+                {
+                    usedList.Items.Remove(entry.Value);
+                }
+            }
+
+            var intededIndex = new Dictionary<AnnotatedListViewItem<WorkshopInfo>, int>();
+
+            foreach (var entry in idToPlaylist)
+            {
+                var id = entry.Key;
+                var info = mods.First(m => m.Id == id);
+
+                if (!idToListView.TryGetValue(id, out var item))
+                {
+                    item = new(info, string.Empty, info.Name);
+                    usedList.Items.Add(item);
+                }
+                else
+                {
+                    item.Annotation = info;
+                    item.SubItems[1].Text = info.Name;
                 }
 
-                var info = mods.First(m => m.Id == mod.Id);
-                var name = info.Name;
-                usedList.Items.Add(new(info, string.Empty, name)
-                {
-                    Checked = mod.Enabled,
-                });
+                item.Checked = entry.Value.Mod.Enabled;
+                intededIndex[item] = entry.Value.Index;
             }
+
+            usedList.Items.SortBy(item => intededIndex[item]);
 
             if (usedList.Items.Count > 0)
             {
@@ -415,14 +464,11 @@ public sealed class LauncherForm : Form
             }
 
             isBuildingUsedList = false;
-            Console.WriteLine("END");
+            usedList.ResumeLayout(true);
         }
 
-        lock (updateModListLock)
-        {
-            UpdateUnusedList();
-            UpdateUsedList();
-        }
+        UpdateUnusedList();
+        UpdateUsedList();
     }
 
     private void SetName()
@@ -459,5 +505,17 @@ public sealed class LauncherForm : Form
     {
         this.cancellationTokenSource.Cancel();
         base.Dispose(disposing);
+    }
+
+    private void Delegate(Action act)
+    {
+        if (this.InvokeRequired)
+        {
+            Invoke(act);
+        }
+        else
+        {
+            act();
+        }
     }
 }
