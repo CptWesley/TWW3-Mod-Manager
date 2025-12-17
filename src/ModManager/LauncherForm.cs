@@ -128,6 +128,12 @@ public sealed class LauncherForm : Form
         unusedList.AutoArrange = false;
         unusedList.FullRowSelect = true;
         unusedList.Columns.Add(new ColumnHeader() { Text = "Name", Width = -2 });
+
+        unusedList.ColumnWidthChanging += (s, e) =>
+        {
+            e.NewWidth = unusedList.Columns[e.ColumnIndex].Width;
+            e.Cancel = true;
+        };
     }
 
     private bool isBuildingUsedList = false;
@@ -262,6 +268,12 @@ public sealed class LauncherForm : Form
             var modId = item.Annotation.Id;
             CheckMod(modId, e.NewValue is CheckState.Checked);
             e.NewValue = e.CurrentValue;
+        };
+
+        usedList.ColumnWidthChanging += (s, e) =>
+        {
+            e.NewWidth = usedList.Columns[e.ColumnIndex].Width;
+            e.Cancel = true;
         };
     }
 
