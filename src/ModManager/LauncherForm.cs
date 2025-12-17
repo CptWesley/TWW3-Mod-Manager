@@ -21,6 +21,8 @@ public sealed class LauncherForm : Form
     private readonly AnnotatedListView<WorkshopInfo> unusedList = new();
     private readonly AnnotatedListView<WorkshopInfo> usedList = new();
 
+    private readonly TextBox shareCodeBox = new();
+
     private readonly Thread backgroundWorker;
 
     private readonly CancellationTokenSource cancellationTokenSource = new();
@@ -57,6 +59,7 @@ public sealed class LauncherForm : Form
         SetupUsedList();
         SetupAddModButton();
         SetupRemoveModbutton();
+        SetupShareCode();
 
         this.MinimumSize = new(600, 350);
         this.Size = new(1200, 700);
@@ -298,6 +301,38 @@ public sealed class LauncherForm : Form
         };
     }
 
+    private void SetupShareCode()
+    {
+        var label = new Label();
+        label.Text = "Share code";
+
+        var copyButton = new Button();
+        copyButton.Text = "Copy to clipboard";
+
+        this.Controls.Add(copyButton);
+        this.Controls.Add(label);
+        this.Controls.Add(shareCodeBox);
+
+        shareCodeBox.WordWrap = false;
+        shareCodeBox.ReadOnly = true;
+        shareCodeBox.BackColor = SystemColors.Window;
+        shareCodeBox.Width = 200;
+
+        unusedList.Resize += (s, e) =>
+        {
+            label.Left = unusedList.Left;
+            label.Top = unusedList.Bottom + DefaultMargin;
+
+            shareCodeBox.Left = label.Left;
+            shareCodeBox.Top = label.Bottom;
+
+            copyButton.Left = shareCodeBox.Right + DefaultMargin;
+            copyButton.Top = shareCodeBox.Top;
+            copyButton.Width = 110;
+            copyButton.Height = shareCodeBox.Height;
+        };
+    }
+
     private void AddMod(ulong id, int index)
     {
         var modified = playlist;
@@ -416,6 +451,7 @@ public sealed class LauncherForm : Form
     private void UpdatePlaylist(Playlist modified)
     {
         playlist = modified;
+        shareCodeBox.Text = playlist.Serialize();
         playlists.Save(playlist);
         UpdateModList();
     }

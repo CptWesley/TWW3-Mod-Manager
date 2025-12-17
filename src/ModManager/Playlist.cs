@@ -29,6 +29,8 @@ public sealed record Playlist
         }
 
         var compressed = Zstd.Compress(bytes);
+
+        byte[] bytesWithVersion = [1, ..compressed];
         var ascii85 = Base85.Ascii85.Encode(compressed);
         return ascii85;
     }
@@ -36,6 +38,22 @@ public sealed record Playlist
     public static Playlist Deserialize(string encoded)
     {
         var bytes = Base85.Ascii85.Decode(encoded).ToArray();
+
+        var version = bytes[0];
+        var withoutVersion = bytes.AsSpan().Slice(1);
+
+        if (version == 1)
+        {
+            return DeserializeVersion1(withoutVersion);
+        }
+        else
+        {
+            throw new InvalidOperationException($"Unsupported version '{version}'.");
+        }
+    }
+
+    private static Playlist DeserializeVersion1(in ReadOnlySpan<byte> bytes)
+    {
         var decompressed = Zstd.Decompress(bytes).ToArray();
         using var ms = new MemoryStream(decompressed);
         using var reader = new BinaryReader(ms, Encoding.UTF8);
