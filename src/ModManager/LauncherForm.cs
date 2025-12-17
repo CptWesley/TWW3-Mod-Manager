@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Threading;
 using System.Xml.Linq;
 
 namespace ModManager;
@@ -46,7 +47,7 @@ public sealed class LauncherForm : Form
 
         InitializeComponent();
 
-        backgroundWorker = new(DoBackgroundWork);
+        backgroundWorker = new(StartBackgroundWork);
         backgroundWorker.Start();
     }
 
@@ -169,6 +170,7 @@ public sealed class LauncherForm : Form
         usedList.AutoArrange = false;
         usedList.FullRowSelect = true;
         usedList.Columns.Add(new ColumnHeader() { Text = "Enabled", Width = 60 });
+        usedList.Columns.Add(new ColumnHeader() { Text = "Status", Width = 60 });
         usedList.Columns.Add(new ColumnHeader() { Text = "Name", Width = -2 });
 
         usedList.AllowDrop = true;
@@ -683,7 +685,7 @@ public sealed class LauncherForm : Form
         this.playlist = playlist;
         shareCodeBox.Text = playlist.Serialize();
         UpdatePlaylistSelector();
-        UpdateModList();
+        _ = UpdateModListAsync();
     }
 
     private void UpdatePlaylistSelector()
@@ -761,36 +763,17 @@ public sealed class LauncherForm : Form
         playlistSelector.ResumeLayout(true);
     }
 
-    private void UpdateModList(CancellationToken cancellationToken = default)
+    private async Task UpdateModListAsync(CancellationToken cancellationToken = default)
     {
         Console.WriteLine("Updating subscribed workshop items...");
-        var subscribedMods = workshop.GetSubscribedItems(cancellationToken);
-        var unsubscribedMods = playlist.Mods
+        var subscribedMods = await workshop.GetSubscribedItems(cancellationToken).ConfigureAwait(false);
+        var unsubscribedModIds = playlist.Mods
             .Where(pm => !subscribedMods.Any(sm => sm.Id == pm.Id))
-            .Select(pm =>
-            {
-                if (workshop.GetInfo(pm) is { } info)
-                {
-                    return info;
-                }
-
-                return new()
-                {
-                    Created = default,
-                    Description = "",
-                    DownloadProgress = 0,
-                    Id = pm.Id,
-                    Image = "",
-                    IsDownloading = false,
-                    IsSubscribed = false,
-                    Name = $"Unknown mod [{pm.Id}]",
-                    Owner = "",
-                    Updated = default,
-                };
-            })
-            .ToImmutableArray();
+            .Select(pm => pm.Id)
+            .ToArray();
+        var unsubscribedMods = await workshop.GetItems(unsubscribedModIds, cancellationToken).ConfigureAwait(false);
         var mods = subscribedMods.AddRange(unsubscribedMods);
-        Delegate(() => UpdateModList(subscribedMods));
+        Delegate(() => UpdateModList(mods));
         Console.WriteLine("Updated subscribed workshop items.");
     }
 
@@ -872,6 +855,8 @@ public sealed class LauncherForm : Form
             usedList.SuspendLayout();
             isBuildingUsedList = true;
 
+            var ready = true;
+
             var lastTopIndex = usedList.TopItem?.Index ?? 0;
 
             var idToPlaylist = new Dictionary<ulong, (PlaylistMod Mod, int Index)>();
@@ -905,15 +890,23 @@ public sealed class LauncherForm : Form
                 var id = entry.Key;
                 var info = mods.First(m => m.Id == id);
 
+                var status = GetStatus(info);
+
+                if (entry.Value.Mod.Enabled && status.Length > 0)
+                {
+                    ready = false;
+                }
+
                 if (!idToListView.TryGetValue(id, out var item))
                 {
-                    item = new(info, string.Empty, info.Name);
+                    item = new(info, string.Empty, status, info.Name);
                     usedList.Items.Add(item);
                 }
                 else
                 {
                     item.Annotation = info;
-                    item.SubItems[1].Text = info.Name;
+                    item.SubItems[1].Text = status;
+                    item.SubItems[2].Text = info.Name;
                 }
 
                 item.Checked = entry.Value.Mod.Enabled;
@@ -929,6 +922,8 @@ public sealed class LauncherForm : Form
                 usedList.TopItem = item;
             }
 
+            startButton.Enabled = ready;
+
             usedListLabel.Text = $"Mods in current playlist ({usedList.Items.Count})";
 
             isBuildingUsedList = false;
@@ -939,6 +934,21 @@ public sealed class LauncherForm : Form
         UpdateUsedList();
     }
 
+    private static string GetStatus(WorkshopInfo info)
+    {
+        if (!info.IsSubscribed)
+        {
+            return "Not Subscribed";
+        }
+
+        if (info.DownloadProgress >= 1)
+        {
+            return "";
+        }
+
+        return $"{(int)(info.DownloadProgress * 100)}%";
+    }
+
     private void SetName()
     {
         var name = "CptWesley's Total War Warhammer III Mod Manager";
@@ -946,7 +956,14 @@ public sealed class LauncherForm : Form
         this.Name = name;
     }
 
-    private void DoBackgroundWork()
+    private async Task DoBackgroundWork(CancellationToken cancellationToken)
+    {
+
+        await UpdateModListAsync(cancellationToken).ConfigureAwait(false);
+        await Task.Delay(5_000, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void StartBackgroundWork()
     {
         try
         {
@@ -954,13 +971,7 @@ public sealed class LauncherForm : Form
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                if (!this.Created)
-                {
-                    continue;
-                }
-
-                UpdateModList(cancellationToken);
-                Task.Delay(5_000, cancellationToken).GetAwaiter().GetResult();
+                DoBackgroundWork(cancellationToken).GetAwaiter().GetResult();
             }
         }
         catch (TaskCanceledException)
@@ -979,7 +990,24 @@ public sealed class LauncherForm : Form
     {
         if (this.InvokeRequired)
         {
-            Invoke(act);
+            var result = Invoke(() =>
+            {
+                try
+                {
+                    act();
+                }
+                catch (Exception ex)
+                {
+                    return ex;
+                }
+
+                return null;
+            });
+
+            if (result is Exception ex)
+            {
+                throw ex;
+            }
         }
         else
         {

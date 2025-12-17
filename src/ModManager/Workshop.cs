@@ -1,3 +1,4 @@
+using Steamworks.Data;
 using Steamworks.Ugc;
 
 namespace ModManager;
@@ -6,41 +7,41 @@ public delegate void WorkshopItemDownloadProgressEventHandler(ulong id, float pr
 
 public sealed class Workshop
 {
-    private static object lck = new();
-
     public event WorkshopItemDownloadProgressEventHandler? DownloadProgress;
 
-    public void Subscribe(PlaylistMod mod)
-        => Subscribe(mod.Id);
+    public async Task Subscribe(PlaylistMod mod, CancellationToken cancellationToken = default)
+        => await Subscribe(mod.Id, cancellationToken).ConfigureAwait(false);
 
-    public void Subscribe(ulong mod)
+    public async Task Subscribe(ulong mod, CancellationToken cancellationToken = default)
     {
-        if (GetItem(mod) is not { } item)
-        {
-            return; // TODO handle error
-        }
+        _ = await GetItemInternal<object?>(
+            id: mod,
+            map: async maybeItem =>
+            {
+                if (maybeItem is not { } item)
+                {
+                    return null; // TODO handle error
+                }
 
-        _ = item.Subscribe().GetAwaiter().GetResult();
-        _ = item.DownloadAsync(progress: progress =>
-        {
-            DownloadProgress?.Invoke(mod, progress);
-        });
+                await item.Subscribe().ConfigureAwait(false);
+                _ = item.DownloadAsync(progress: progress =>
+                {
+                    DownloadProgress?.Invoke(mod, progress);
+                });
+
+                return null;
+            },
+            cancellationToken)
+            .ConfigureAwait(false);
     }
 
-    public WorkshopInfo? GetInfo(PlaylistMod mod)
-        => GetInfo(mod.Id);
+    public async Task<WorkshopInfo?> GetInfo(PlaylistMod mod, CancellationToken cancellationToken = default)
+        => await GetInfo(mod.Id, cancellationToken).ConfigureAwait(false);
 
-    public WorkshopInfo? GetInfo(ulong mod)
-    {
-        if (GetItem(mod) is not { } item)
-        {
-            return null;
-        }
+    public async Task<WorkshopInfo?> GetInfo(ulong mod, CancellationToken cancellationToken = default)
+        => (await GetItems([mod], cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
-        return Convert(item);
-    }
-
-    private WorkshopInfo Convert(Item item)
+    private static WorkshopInfo Convert(Item item)
         => new ()
         {
             Id = item.Id.Value,
@@ -52,84 +53,185 @@ public sealed class Workshop
             Owner = item.Owner.Name,
             IsSubscribed = item.IsSubscribed,
             IsDownloading = item.IsDownloading || item.IsDownloadPending,
-            DownloadProgress = item.DownloadAmount,
+            DownloadProgress = (!item.IsDownloading && !item.IsInstalled) ? 0 : item.DownloadAmount,
         };
 
-    public ImmutableArray<WorkshopInfo> GetSubscribedItems(CancellationToken cancellationToken = default)
+    public async Task<ImmutableArray<WorkshopInfo>> GetSubscribedItems(CancellationToken cancellationToken = default)
     {
+        var query = Query
+            .Items
+            .WhereUserSubscribed();
+        var result = (await DoQuery(
+                query: query,
+                name: "GetSubscribedItems",
+                map: items => Task.FromResult(items.Select(Convert).ToImmutableArray()),
+                cancellationToken: cancellationToken)
+                .ConfigureAwait(false))
+            .OrderBy(static item => item.Name)
+            .ThenBy(static item => item.Id)
+            .ToImmutableArray();
+        return result;
+    }
+
+    public async Task<ImmutableArray<WorkshopInfo>> GetItems(IEnumerable<ulong> ids, CancellationToken cancellationToken = default)
+    {
+        var result = (await GetItemsInternal(
+                ids: ids,
+                map: items => Task.FromResult(items.Select(Convert).ToImmutableArray()),
+                cancellationToken: cancellationToken)
+                .ConfigureAwait(false))
+            .OrderBy(static item => item.Name)
+            .ThenBy(static item => item.Id)
+            .ToImmutableArray();
+        return result;
+    }
+
+    private async Task<T> GetItemInternal<T>(
+        ulong id,
+        Func<Item?, Task<T>> map,
+        CancellationToken cancellationToken)
+    {
+        var result = await GetItemsInternal(
+            ids: [id],
+            map: items =>
+            {
+                var item = items.Length <= 0 ? default(Item?) : items[0];
+                var mapResult = map(item);
+                return mapResult;
+            },
+            cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        return result;
+    }
+
+    private async Task<T> GetItemsInternal<T>(
+        IEnumerable<ulong> ids,
+        Func<ImmutableArray<Item>, Task<T>> map,
+        CancellationToken cancellationToken)
+    {
+        var queryIds = ids
+            .Select(id => (PublishedFileId)id)
+            .ToArray();
+
+        if (queryIds.Length == 0)
+        {
+            var emptyResult = await map([]);
+            return emptyResult;
+        }
+        else if (queryIds.Length == 1)
+        {
+            var sw = Stopwatch.StartNew();
+            var singleItem = await Item.GetAsync(queryIds[0]);
+
+            Console.WriteLine($"Get item took {sw.ElapsedMilliseconds} ms.");
+
+            if (!singleItem.HasValue)
+            {
+                var emptyResult = await map([]);
+                return emptyResult;
+            }
+            else
+            {
+                var singleResult = await map([singleItem.Value]);
+                return singleResult;
+            }
+
+        }
+
+        var query = Query
+            .Items
+            .WithFileId(queryIds);
+
+        var result = await DoQuery(query, "GetItemsInternal", map, cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
+    private async Task<T> DoQuery<T>(
+        Query query,
+        string name,
+        Func<ImmutableArray<Item>, Task<T>> map,
+        CancellationToken cancellationToken)
+    {
+        var disposables = new List<IDisposable>();
+        var sw = Stopwatch.StartNew();
+
         try
         {
-            var result = new List<WorkshopInfo>();
+            var items = new List<Item>();
             var seen = new HashSet<ulong>();
 
-            var query = Query
-                .Items
-                .WhereUserSubscribed();
             var page = 1;
 
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (GetPage(query, page) is not { } pageResult)
+                if (await GetPage(query, page) is not { } pageResult)
                 {
                     break;
                 }
 
-                var items = pageResult
-                    .Entries
-                    .Select(Convert);
+                disposables.Add(pageResult);
 
-                foreach (var item in items)
+                var pageItems = pageResult
+                    .Entries;
+
+                foreach (var item in pageItems)
                 {
                     if (seen.Add(item.Id))
                     {
-                        result.Add(item);
+                        items.Add(item);
                     }
                 }
+
+                if (pageResult.TotalCount <= seen.Count)
+                {
+                    break;
+                }    
 
                 page++;
             }
 
-            return result
-                .OrderBy(static item => item.Name)
-                .ThenBy(static item => item.Id)
-                .ToImmutableArray();
+            var result = await map(items.ToImmutableArray());
+            return result;
         }
-        catch (Exception)
+        finally
         {
-            if (cancellationToken.IsCancellationRequested)
+            foreach (var disposable in disposables)
             {
-                return [];
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(ex);
+                }
             }
-            else
-            {
-                throw;
-            }
+
+            sw.Stop();
+            Console.WriteLine($"Query '{name}' took {sw.ElapsedMilliseconds} ms.");
         }
     }
 
-    private static Item? GetItem(ulong id)
+    private static async Task<ResultPage?> GetPage(Query query, int page)
     {
-        lock (lck)
+        var maybePageResult = await query
+            .GetPageAsync(page)
+            .ConfigureAwait(false);
+
+        if (maybePageResult is not { } pageResult)
         {
-            return Item.GetAsync(id).GetAwaiter().GetResult();
+            return null;
         }
-    }
 
-    private static ResultPage? GetPage(in Query query, int page)
-    {
-        lock (lck)
+        if (pageResult.ResultCount <= 0)
         {
-            var maybePageResult = query.GetPageAsync(page).GetAwaiter().GetResult();
-
-            if (maybePageResult is not { } pageResult || pageResult.ResultCount <= 0)
-            {
-                return null;
-            }
-
-            return maybePageResult;
+            pageResult.Dispose();
+            return null;
         }
+
+        return pageResult;
     }
 }
 
