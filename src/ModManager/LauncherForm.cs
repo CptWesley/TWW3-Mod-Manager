@@ -5,6 +5,7 @@ namespace ModManager;
 public sealed class LauncherForm : Form
 {
     private const int DefaultMargin = 15;
+    private const int LabelVerticalOffset = 4;
     private const int AddRemoveButtonSize = 30;
 
     private readonly GameLauncher launcher;
@@ -21,6 +22,7 @@ public sealed class LauncherForm : Form
     private readonly AnnotatedListView<WorkshopInfo> usedList = new();
 
     private readonly TextBox shareCodeBox = new();
+    private readonly ComboBox playlistSelector = new();
 
     private readonly Thread backgroundWorker;
 
@@ -56,6 +58,7 @@ public sealed class LauncherForm : Form
         SetupUsedList();
         SetupAddModButton();
         SetupRemoveModbutton();
+        SetupPlaylistSelector();
         SetupShareCode();
 
         this.MinimumSize = new(600, 350);
@@ -298,35 +301,88 @@ public sealed class LauncherForm : Form
         };
     }
 
+    private void SetupPlaylistSelector()
+    {
+        var label = new Label();
+        label.Text = "Playlist:";
+
+        var createButton = new Button();
+        createButton.Text = "Create";
+
+        var deleteButton = new Button();
+        deleteButton.Text = "Delete";
+
+        this.Controls.Add(createButton);
+        this.Controls.Add(deleteButton);
+        this.Controls.Add(label);
+        this.Controls.Add(playlistSelector);
+
+        this.Resize += (s, e) =>
+        {
+            label.Width = 70;
+            label.Left = usedList.Left;
+            label.Top = usedList.Bottom + DefaultMargin + LabelVerticalOffset;
+
+            playlistSelector.Left = label.Right;
+            playlistSelector.Top = usedList.Bottom + DefaultMargin;
+
+            deleteButton.Width = 50;
+            deleteButton.Height = playlistSelector.Height;
+
+            deleteButton.Left = usedList.Right - deleteButton.Width;
+            deleteButton.Top = playlistSelector.Top;
+
+            createButton.Width = 50;
+            createButton.Height = playlistSelector.Height;
+
+            createButton.Left = deleteButton.Left - (DefaultMargin / 2) - createButton.Width;
+            createButton.Top = playlistSelector.Top;
+
+            playlistSelector.Width = usedList.Width - label.Width - createButton.Width - deleteButton.Width - DefaultMargin;
+        };
+    }
+
     private void SetupShareCode()
     {
         var label = new Label();
-        label.Text = "Share code";
+        label.Text = "Share code:";
 
         var copyButton = new Button();
-        copyButton.Text = "Copy to clipboard";
+        copyButton.Text = "Copy";
+
+        var importButton = new Button();
+        importButton.Text = "Import";
 
         this.Controls.Add(copyButton);
+        this.Controls.Add(importButton);
         this.Controls.Add(label);
         this.Controls.Add(shareCodeBox);
 
         shareCodeBox.WordWrap = false;
         shareCodeBox.ReadOnly = true;
         shareCodeBox.BackColor = SystemColors.Window;
-        shareCodeBox.Width = 200;
-
-        unusedList.Resize += (s, e) =>
+        this.Resize += (s, e) =>
         {
-            label.Left = unusedList.Left;
-            label.Top = unusedList.Bottom + DefaultMargin;
+            label.Left = usedList.Left;
+            label.Top = playlistSelector.Bottom + DefaultMargin + LabelVerticalOffset;
+            label.Width = 70;
 
-            shareCodeBox.Left = label.Left;
-            shareCodeBox.Top = label.Bottom;
+            shareCodeBox.Left = playlistSelector.Left;
+            shareCodeBox.Top = playlistSelector.Bottom + DefaultMargin;
 
-            copyButton.Left = shareCodeBox.Right + DefaultMargin;
-            copyButton.Top = shareCodeBox.Top;
-            copyButton.Width = 110;
+            importButton.Width = 50;
+            importButton.Height = shareCodeBox.Height;
+
+            importButton.Left = usedList.Right - importButton.Width;
+            importButton.Top = shareCodeBox.Top;
+
+            copyButton.Width = 50;
             copyButton.Height = shareCodeBox.Height;
+
+            copyButton.Left = importButton.Left - (DefaultMargin / 2) - copyButton.Width;
+            copyButton.Top = shareCodeBox.Top;
+
+            shareCodeBox.Width = usedList.Width - label.Width - copyButton.Width - importButton.Width - DefaultMargin;
         };
 
         copyButton.Click += (s, e) =>
