@@ -592,6 +592,8 @@ public sealed class LauncherForm : Form
         this.Controls.Add(modSubscribeButton);
 
         modPicture.SizeMode = PictureBoxSizeMode.StretchImage;
+        modSubscribeButton.Text = "Subscribe";
+        modSubscribeButton.Visible = false;
 
         this.Resize += (s, e) =>
         {
@@ -622,6 +624,11 @@ public sealed class LauncherForm : Form
             modDescription.Top = modCreator.Bottom + DefaultMargin;
             modDescription.AutoSize = true;
             modDescription.MaximumSize = new(potentialWidth, potentialHeight);
+
+            modSubscribeButton.Left = modName.Left;
+            modSubscribeButton.Width = 100;
+            modSubscribeButton.Height = 30;
+            modSubscribeButton.Top = modDescription.Bottom + DefaultMargin;
         };
 
         usedList.SelectedIndexChanged += (s, e) =>
@@ -660,6 +667,7 @@ public sealed class LauncherForm : Form
 
         modSubscribeButton.Visible = true;
         modSubscribeButton.Enabled = !mod.IsSubscribed;
+        modSubscribeButton.Top = modDescription.Bottom + DefaultMargin;
     }
 
     private void UpdateModInfo()
