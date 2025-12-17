@@ -475,6 +475,68 @@ public sealed class LauncherForm : Form
         {
             Clipboard.SetText(shareCodeBox.Text);
         };
+
+        importButton.Click += (s, e) =>
+        {
+            using var importDialog = new TextInputDialog
+            {
+                Text = "Import Playlist",
+                Label = $"Please enter the share code of the playlist you would like to import.",
+            };
+
+            if (importDialog.ShowDialog(this) is not DialogResult.OK)
+            {
+                return;
+            }
+
+            Playlist imported;
+            try
+            {
+                imported = Playlist.Deserialize(importDialog.Input);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex);
+                MessageBox.Show($"An error has occurred while trying to import the playlist.\n\n{ex}");
+                return;
+            }
+
+            using var nameDialog = new TextInputDialog
+            {
+                Text = "Import Playlist",
+                Label = $"Please enter the name of the imported playlist.",
+                Input = imported.Name,
+            };
+
+            if (nameDialog.ShowDialog(this) is not DialogResult.OK)
+            {
+                return;
+            }
+
+            var name = nameDialog.Input;
+
+            if (playlists.Get().Any(p => p.Name == name))
+            {
+                using var overwriteDialog = new TextInputDialog
+                {
+                    Text = "Confirm Overwrite Playlist",
+                    Label = $"There is already a playlist with the name '{name}'. Are you sure you want to overwrite it? If you continue the old playlist will be deleted.",
+                    InputVisible = false,
+                };
+
+                if (overwriteDialog.ShowDialog(this) is not DialogResult.OK)
+                {
+                    return;
+                }
+            }
+
+            var renamed = imported with
+            {
+                Name = name,
+            };
+
+            UpdatePlaylist(renamed);
+        };
     }
 
     private void AddMod(ulong id, int index)
