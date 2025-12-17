@@ -5,13 +5,17 @@ namespace ModManager.Internal;
 internal sealed class AnnotatedListView<T> : ListView
 {
     private readonly AnnotatedListViewItemCollection<T> items;
+    private readonly AnnotatedListViewItemCollection<T> selectedItems;
 
     public AnnotatedListView() : base()
     {
         items = new(base.Items);
+        selectedItems = new(base.SelectedItems);
     }
 
     public new AnnotatedListViewItemCollection<T> Items => items;
+
+    public new AnnotatedListViewItemCollection<T> SelectedItems => selectedItems;
 
     public new AnnotatedListViewItem<T> TopItem
     {
@@ -23,7 +27,7 @@ internal sealed class AnnotatedListView<T> : ListView
         => (AnnotatedListViewItem<T>)base.GetItemAt(x, y);
 }
 
-internal sealed class AnnotatedListViewItemCollection<T>(ListView.ListViewItemCollection wrapped)
+internal sealed class AnnotatedListViewItemCollection<T>(IList wrapped)
     : IList<AnnotatedListViewItem<T>>, IReadOnlyList<AnnotatedListViewItem<T>>
 {
     public AnnotatedListViewItem<T> this[int index]

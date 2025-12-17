@@ -1,11 +1,12 @@
-using System;
 using System.Drawing;
+using System.Reflection;
 
 namespace ModManager;
 
 public sealed class LauncherForm : Form
 {
     private const int DefaultMargin = 15;
+    private const int AddRemoveButtonSize = 30;
 
     private readonly GameLauncher launcher;
     private readonly UsedMods usedMods;
@@ -13,6 +14,10 @@ public sealed class LauncherForm : Form
     private readonly Workshop workshop;
 
     private readonly Button startButton = new();
+
+    private readonly Button addToPlaylistButton = new();
+    private readonly Button removeFromPlaylistButton = new();
+
     private readonly AnnotatedListView<WorkshopInfo> unusedList = new();
     private readonly AnnotatedListView<WorkshopInfo> usedList = new();
 
@@ -50,6 +55,8 @@ public sealed class LauncherForm : Form
         SetupStartButton();
         SetupUnusedList();
         SetupUsedList();
+        SetupAddModButton();
+        SetupRemoveModbutton();
 
         this.MinimumSize = new(600, 350);
         this.Size = new(1200, 700);
@@ -90,16 +97,26 @@ public sealed class LauncherForm : Form
 
     private void SetupUnusedList()
     {
+        var label = new Label();
+        label.Text = "Available mods";
+
+        this.Controls.Add(label);
         this.Controls.Add(unusedList);
+
         this.Resize += (s, e) =>
         {
             var width = this.ClientSize.Width;
             var height = this.ClientSize.Height;
 
-            unusedList.Left = DefaultMargin;
-            unusedList.Top = DefaultMargin;
+            label.Left = DefaultMargin;
+            label.Top = DefaultMargin;
+
+            unusedList.Left = label.Left;
+            unusedList.Top = label.Bottom;
             unusedList.Width = (width - (4 * DefaultMargin)) / 3;
             unusedList.Height = height - (10 * DefaultMargin);
+
+            label.Width = unusedList.Width;
         };
 
         unusedList.View = View.Details;
@@ -112,6 +129,10 @@ public sealed class LauncherForm : Form
 
     private void SetupUsedList()
     {
+        var label = new Label();
+        label.Text = "Mods in current playlist";
+
+        this.Controls.Add(label);
         this.Controls.Add(usedList);
         this.Resize += (s, e) =>
         {
@@ -121,8 +142,16 @@ public sealed class LauncherForm : Form
             usedList.Width = (width - (4 * DefaultMargin)) / 3;
             usedList.Height = height - (10 * DefaultMargin);
 
-            usedList.Left = DefaultMargin + usedList.Width + DefaultMargin;
+            usedList.Left = DefaultMargin + AddRemoveButtonSize + DefaultMargin + usedList.Width + DefaultMargin;
             usedList.Top = DefaultMargin;
+
+            label.Width = usedList.Width;
+
+            label.Left = DefaultMargin + AddRemoveButtonSize + DefaultMargin + usedList.Width + DefaultMargin;
+            label.Top = DefaultMargin;
+
+            usedList.Left = label.Left;
+            usedList.Top = label.Bottom;
         };
 
         usedList.CheckBoxes = true;
@@ -219,6 +248,56 @@ public sealed class LauncherForm : Form
 
     }
 
+    private void SetupAddModButton()
+    {
+        this.Controls.Add(addToPlaylistButton);
+        addToPlaylistButton.Text = ">>";
+        addToPlaylistButton.Width = AddRemoveButtonSize;
+        addToPlaylistButton.Height = AddRemoveButtonSize;
+        addToPlaylistButton.Enabled = false;
+        unusedList.ItemSelectionChanged += (s, e) =>
+        {
+            addToPlaylistButton.Enabled = unusedList.SelectedIndices.Count > 0;
+        };
+
+        addToPlaylistButton.Click += (s, e) =>
+        {
+            var ids = unusedList.SelectedItems.Select(x => x.Annotation.Id);
+            AddMods(ids);
+        };
+
+        unusedList.Resize += (s, e) =>
+        {
+            addToPlaylistButton.Left = unusedList.Right + DefaultMargin;
+            addToPlaylistButton.Top = unusedList.Top + (unusedList.Height / 2) - (DefaultMargin / 2) - AddRemoveButtonSize;
+        };
+    }
+
+    private void SetupRemoveModbutton()
+    {
+        this.Controls.Add(removeFromPlaylistButton);
+        removeFromPlaylistButton.Text = "<<";
+        removeFromPlaylistButton.Width = AddRemoveButtonSize;
+        removeFromPlaylistButton.Height = AddRemoveButtonSize;
+        removeFromPlaylistButton.Enabled = false;
+        usedList.ItemSelectionChanged += (s, e) =>
+        {
+            removeFromPlaylistButton.Enabled = usedList.SelectedIndices.Count > 0;
+        };
+
+        removeFromPlaylistButton.Click += (s, e) =>
+        {
+            var ids = usedList.SelectedItems.Select(x => x.Annotation.Id);
+            RemoveMods(ids);
+        };
+
+        unusedList.Resize += (s, e) =>
+        {
+            removeFromPlaylistButton.Left = unusedList.Right + DefaultMargin;
+            removeFromPlaylistButton.Top = unusedList.Top + (unusedList.Height / 2) + (DefaultMargin / 2);
+        };
+    }
+
     private void AddMod(ulong id, int index)
     {
         var modified = playlist;
@@ -257,6 +336,50 @@ public sealed class LauncherForm : Form
         }
 
         UpdatePlaylist(modified);
+    }
+
+    private void AddMods(IEnumerable<ulong> ids)
+    {
+        var modified = playlist;
+        var oldCount = modified.Mods.Length;
+
+        var idSet = new HashSet<ulong>(modified.Mods.Select(m => m.Id));
+
+        modified = modified with
+        {
+            Mods = modified.Mods
+                .AddRange(ids.Where(id => !idSet.Contains(id)).Select(id => new PlaylistMod { Id = id, Enabled = true }))
+                .ToImmutableArray(),
+        };
+
+        var newCount = modified.Mods.Length;
+
+        if (newCount != oldCount)
+        {
+            UpdatePlaylist(modified);
+        }
+    }
+
+    private void RemoveMods(IEnumerable<ulong> ids)
+    {
+        var modified = playlist;
+        var oldCount = modified.Mods.Length;
+
+        var idSet = new HashSet<ulong>(ids);
+
+        modified = modified with
+        {
+            Mods = modified.Mods
+                .Where(mod => !idSet.Contains(mod.Id))
+                .ToImmutableArray(),
+        };
+
+        var newCount = modified.Mods.Length;
+
+        if (newCount != oldCount)
+        {
+            UpdatePlaylist(modified);
+        }
     }
 
     private void CheckMod(ulong id, bool enabled)
