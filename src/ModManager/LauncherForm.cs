@@ -876,6 +876,7 @@ public sealed class LauncherForm : Form
             usedList.SuspendLayout();
             isBuildingUsedList = true;
 
+            var showStatus = false;
             var ready = true;
 
             var lastTopIndex = usedList.TopItem?.Index ?? 0;
@@ -926,6 +927,11 @@ public sealed class LauncherForm : Form
 
                 var status = GetStatus(info);
 
+                if (status.Length > 0)
+                {
+                    showStatus = true;
+                }
+
                 if (entry.Value.Mod.Enabled && status.Length > 0)
                 {
                     ready = false;
@@ -957,7 +963,7 @@ public sealed class LauncherForm : Form
             }
 
             startButton.Enabled = ready;
-            ToggleStatusColumn(!ready);
+            ToggleStatusColumn(showStatus);
 
             usedListLabel.Text = $"Mods in current playlist ({usedList.Items.Count})";
 
