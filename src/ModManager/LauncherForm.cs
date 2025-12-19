@@ -819,7 +819,7 @@ public sealed class LauncherForm : Form
         modResubscribeButton.Enabled = false;
     }
 
-    private void SetModInfo(WorkshopInfo mod)
+    private void SetModInfo(WorkshopInfo mod, string ownerName)
     {
         modName.Text = mod.Name;
         modDescription.Text = mod.Description;
@@ -833,7 +833,7 @@ public sealed class LauncherForm : Form
             modPicture.ImageLocation = null;
         }
 
-        modCreator.Text = $"Author: {mod.Owner}";
+        modCreator.Text = $"Author: {ownerName}";
         modUpdated.Text = $"Last updated: {mod.Updated}";
 
         modUrlSteam.Visible = true;
@@ -883,7 +883,9 @@ public sealed class LauncherForm : Form
         var queried = await workshop.GetInfo(fromList.Id).ConfigureAwait(false);
         var info = queried ?? fromList;
 
-        Delegate(() =>
+        var ownerName = await workshop.GetPlayerName(info.Owner).ConfigureAwait(false);
+
+        Delegate(async () =>
         {
             if (focusedList is null || focusedList.SelectedItems.Count != 1)
             {
@@ -899,7 +901,7 @@ public sealed class LauncherForm : Form
 
             selected = info;
 
-            SetModInfo(selected);
+            SetModInfo(selected, ownerName);
         });
     }
 
@@ -1252,7 +1254,7 @@ public sealed class LauncherForm : Form
                         Image = string.Empty,
                         IsDownloading = false,
                         IsSubscribed = false,
-                        Owner = string.Empty,
+                        Owner = 0,
                         Updated = default,
                     };
 

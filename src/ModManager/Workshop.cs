@@ -1,5 +1,7 @@
+using Steamworks;
 using Steamworks.Data;
 using Steamworks.Ugc;
+using System.Collections.Concurrent;
 
 namespace ModManager;
 
@@ -8,6 +10,8 @@ public delegate void WorkshopItemDownloadProgressEventHandler(ulong id, float pr
 public sealed class Workshop
 {
     public event WorkshopItemDownloadProgressEventHandler? DownloadProgress;
+
+    private readonly ConcurrentDictionary<ulong, string> playerNames = new();
 
     public async Task Subscribe(ulong mod, CancellationToken cancellationToken = default)
     {
@@ -62,7 +66,27 @@ public sealed class Workshop
     public async Task<WorkshopInfo?> GetInfo(ulong mod, CancellationToken cancellationToken = default)
         => (await GetItems([mod], cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
-    private static WorkshopInfo Convert(Item item)
+    public async Task<string> GetPlayerName(ulong playerId, CancellationToken cancellationToken = default)
+    {
+        if (playerNames.TryGetValue(playerId, out var playerName))
+        {
+            return playerName;
+        }
+
+        var needRequest = SteamFriends.RequestUserInformation(playerId, nameonly: true);
+        var friend = new Friend(playerId);
+
+        if (needRequest)
+        {
+            await friend.RequestInfoAsync();
+        }
+
+        var name = friend.Name;
+        playerNames.TryAdd(playerId, name);
+        return name;
+    }
+
+    private WorkshopInfo Convert(Item item)
         => new ()
         {
             Id = item.Id.Value,
@@ -71,7 +95,7 @@ public sealed class Workshop
             Image = item.PreviewImageUrl,
             Created = item.Created,
             Updated = item.Updated,
-            Owner = item.Owner.Name,
+            Owner = item.Owner.Id,
             IsSubscribed = item.IsSubscribed,
             IsDownloading = item.IsDownloading || item.IsDownloadPending,
             DownloadProgress = (!item.IsDownloading && !item.IsInstalled) ? 0 : item.DownloadAmount,
@@ -264,7 +288,7 @@ public sealed record WorkshopInfo
 
     public required string Description { get; init; }
 
-    public required string Owner { get; init; }
+    public required ulong Owner { get; init; }
 
     public required string Image { get; init; }
 
