@@ -15,6 +15,7 @@ public sealed class LauncherForm : Form
 
     private readonly Button startButton = new();
     private readonly Button subscribeAllButton = new();
+    private readonly Button resubscribeAllButton = new();
 
     private readonly Button addToPlaylistButton = new();
     private readonly Button removeFromPlaylistButton = new();
@@ -32,6 +33,7 @@ public sealed class LauncherForm : Form
     private readonly TextBox modDescription = new();
     private readonly Label modCreator = new();
     private readonly Label modUpdated = new();
+    private readonly LinkLabel modDirectory = new();
     private readonly LinkLabel modUrlSteam = new();
     private readonly LinkLabel modUrlBrowser = new();
     private readonly Button modSubscribeButton = new();
@@ -71,6 +73,7 @@ public sealed class LauncherForm : Form
         SetName();
         SetupVersionLabel();
         SetupStartButton();
+        SetupResubscribeAllButton();
         SetupSubscribeAllButton();
         SetupUnusedList();
         SetupUsedList();
@@ -117,6 +120,31 @@ public sealed class LauncherForm : Form
         };
     }
 
+    private void SetupResubscribeAllButton()
+    {
+        this.Controls.Add(this.resubscribeAllButton);
+        resubscribeAllButton.Enabled = false;
+        resubscribeAllButton.Text = "Resubscribe All";
+        resubscribeAllButton.Width = 100;
+        resubscribeAllButton.Height = 30;
+
+        this.Resize += (s, e) =>
+        {
+            resubscribeAllButton.Top = startButton.Top;
+            resubscribeAllButton.Left = startButton.Left - resubscribeAllButton.Width - DefaultMargin;
+        };
+
+        resubscribeAllButton.Click += (s, e) =>
+        {
+            var ids = usedList
+                .Items
+                .Where(m => m.Checked && m.Annotation.IsSubscribed)
+                .Select(m => m.Annotation.Id)
+                .ToArray();
+            _ = ResubscribeToMods(ids);
+        };
+    }
+
     private void SetupSubscribeAllButton()
     {
         this.Controls.Add(this.subscribeAllButton);
@@ -127,8 +155,8 @@ public sealed class LauncherForm : Form
 
         this.Resize += (s, e) =>
         {
-            subscribeAllButton.Top = startButton.Top;
-            subscribeAllButton.Left = startButton.Left - subscribeAllButton.Width - DefaultMargin;
+            subscribeAllButton.Top = resubscribeAllButton.Top;
+            subscribeAllButton.Left = resubscribeAllButton.Left - resubscribeAllButton.Width - DefaultMargin;
         };
 
         subscribeAllButton.Click += (s, e) =>
@@ -620,6 +648,7 @@ public sealed class LauncherForm : Form
         this.Controls.Add(modPicture);
         this.Controls.Add(modCreator);
         this.Controls.Add(modUpdated);
+        this.Controls.Add(modDirectory);
         this.Controls.Add(modUrlSteam);
         this.Controls.Add(modUrlBrowser);
         this.Controls.Add(modDescription);
@@ -638,6 +667,8 @@ public sealed class LauncherForm : Form
         modResubscribeButton.Text = "Resubscribe";
         modResubscribeButton.Visible = false;
 
+        modDirectory.Text = "Open in Explorer";
+        modDirectory.Visible = false;
         modUrlSteam.Text = "Open in Steam";
         modUrlSteam.Visible = false;
         modUrlBrowser.Text = "Open in Browser";
@@ -659,7 +690,7 @@ public sealed class LauncherForm : Form
             modPicture.Left = modName.Left;
             modPicture.Top = modName.Bottom;
 
-            var potentialHeight = usedList.Height / 2;
+            var potentialHeight = usedList.Height / 4;
             var size = Math.Min(potentialWidth, potentialHeight);
             modPicture.Width = size;
             modPicture.Height = size;
@@ -673,8 +704,12 @@ public sealed class LauncherForm : Form
             modUpdated.Width = potentialWidth / 2;
             modUpdated.TextAlign = ContentAlignment.TopRight;
 
-            modUrlSteam.Left = modCreator.Left;
-            modUrlSteam.Top = modCreator.Bottom + DefaultMargin;
+            modDirectory.Left = modCreator.Left;
+            modDirectory.Top = modCreator.Bottom + (DefaultMargin / 2);
+            modDirectory.Width = potentialWidth;
+
+            modUrlSteam.Left = modDirectory.Left;
+            modUrlSteam.Top = modDirectory.Bottom + (DefaultMargin / 2);
             modUrlSteam.Width = potentialWidth / 2;
 
             modUrlBrowser.Left = modUrlSteam.Right;
@@ -683,7 +718,7 @@ public sealed class LauncherForm : Form
             modUrlBrowser.TextAlign = ContentAlignment.TopRight;
 
             modDescription.Left = modName.Left;
-            modDescription.Top = modUrlSteam.Bottom + DefaultMargin;
+            modDescription.Top = modUrlSteam.Bottom + (DefaultMargin / 2);
             modDescription.AutoSize = true;
             modDescription.Width = potentialWidth;
             modDescription.Height = usedList.Bottom - modDescription.Top;
@@ -737,6 +772,13 @@ public sealed class LauncherForm : Form
             }
         };
 
+        modDirectory.LinkClicked += (s, e) =>
+        {
+            if (selected?.Directory is { } dir && Directory.Exists(dir))
+            {
+                _ = Process.Start("explorer.exe", dir);
+            }
+        };
         modUrlSteam.LinkClicked += (s, e) =>
         {
             if (selected is { })
@@ -762,11 +804,7 @@ public sealed class LauncherForm : Form
             return;
         }
 
-        foreach (var id in ids)
-        {
-            await workshop.Subscribe(id);
-        }
-
+        await Task.WhenAll(ids.Select(id => workshop.Subscribe(id)).ToArray());
         await UpdateModListAsync();
     }
 
@@ -777,11 +815,7 @@ public sealed class LauncherForm : Form
             return;
         }
 
-        foreach (var id in ids)
-        {
-            await workshop.Unsubscribe(id);
-        }
-
+        await Task.WhenAll(ids.Select(id => workshop.Unsubscribe(id)).ToArray());
         await UpdateModListAsync();
     }
 
@@ -792,11 +826,7 @@ public sealed class LauncherForm : Form
             return;
         }
 
-        foreach (var id in ids)
-        {
-            await workshop.Resubscribe(id);
-        }
-
+        await Task.WhenAll(ids.Select(id => workshop.Resubscribe(id)).ToArray());
         await UpdateModListAsync();
     }
 
@@ -807,6 +837,8 @@ public sealed class LauncherForm : Form
         modPicture.ImageLocation = null;
         modCreator.Text = string.Empty;
         modUpdated.Text = string.Empty;
+        modDirectory.Visible = false;
+        modDirectory.Enabled = false;
         modUrlSteam.Visible = false;
         modUrlSteam.Enabled = false;
         modUrlBrowser.Visible = false;
@@ -836,6 +868,8 @@ public sealed class LauncherForm : Form
         modCreator.Text = $"Author: {ownerName}";
         modUpdated.Text = $"Last updated: {mod.Updated}";
 
+        modDirectory.Visible = !string.IsNullOrWhiteSpace(mod.Directory) && Directory.Exists(mod.Directory);
+        modDirectory.Enabled = modDirectory.Visible;
         modUrlSteam.Visible = true;
         modUrlSteam.Enabled = true;
         modUrlBrowser.Visible = true;
@@ -1250,6 +1284,7 @@ public sealed class LauncherForm : Form
                         Name = id.ToString(),
                         Created = default,
                         Description = string.Empty,
+                        Directory = string.Empty,
                         DownloadProgress = 0,
                         Image = string.Empty,
                         IsDownloading = false,
@@ -1297,6 +1332,11 @@ public sealed class LauncherForm : Form
 
             startButton.Enabled = ready;
             subscribeAllButton.Enabled = !ready;
+            resubscribeAllButton.Enabled = usedList
+                .Items
+                .Where(m => m.Checked && m.Annotation.IsSubscribed)
+                .Select(m => m.Annotation.Id)
+                .Any();
             ToggleStatusColumn(showStatus);
 
             usedListLabel.Text = $"Mods in current playlist ({usedList.Items.Count})";

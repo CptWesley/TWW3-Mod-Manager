@@ -92,6 +92,7 @@ public sealed class Workshop
             Id = item.Id.Value,
             Name = item.Title,
             Description = item.Description,
+            Directory = item.Directory,
             Image = item.PreviewImageUrl,
             Created = item.Created,
             Updated = item.Updated,
@@ -287,6 +288,8 @@ public sealed record WorkshopInfo
     public required string Name { get; init; }
 
     public required string Description { get; init; }
+
+    public required string Directory { get; init; }
 
     public required ulong Owner { get; init; }
 
