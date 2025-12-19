@@ -1,6 +1,5 @@
 using System.Drawing;
-using System.Threading;
-using System.Xml.Linq;
+using System.Reflection;
 
 namespace ModManager;
 
@@ -672,6 +671,10 @@ public sealed class LauncherForm : Form
         {
             UpdateModInfo();
         };
+        unusedList.SelectedIndexChanged += (s, e) =>
+        {
+            UpdateModInfo();
+        };
 
         modSubscribeButton.Click += (s, e) =>
         {
@@ -755,15 +758,26 @@ public sealed class LauncherForm : Form
         modUnsubscribeButton.Top = modSubscribeButton.Top;
     }
 
+    private AnnotatedListView<WorkshopInfo>? focusedList = null;
+
     private void UpdateModInfo()
     {
-        if (usedList.SelectedItems.Count != 1)
+        if (usedList.ContainsFocus)
+        {
+            focusedList = usedList;
+        }
+        else if (unusedList.ContainsFocus)
+        {
+            focusedList = unusedList;
+        }
+
+        if (focusedList is null || focusedList.SelectedItems.Count != 1)
         {
             ClearModInfo();
         }
         else
         {
-            var selected = usedList.SelectedItems[0];
+            var selected = focusedList.SelectedItems[0];
             SetModInfo(selected.Annotation);
         }
     }
