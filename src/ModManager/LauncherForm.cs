@@ -65,6 +65,7 @@ public sealed class LauncherForm : Form
         this.FormClosing += (s, e) => this.cancellationTokenSource.Cancel();
         this.FormClosed += (s, e) => this.cancellationTokenSource.Cancel();
         SetName();
+        SetupVersionLabel();
         SetupStartButton();
         SetupSubscribeAllButton();
         SetupUnusedList();
@@ -1205,6 +1206,22 @@ public sealed class LauncherForm : Form
         var name = "CptWesley's Total War Warhammer III Mod Manager";
         this.Text = name;
         this.Name = name;
+    }
+
+    private void SetupVersionLabel()
+    {
+        var version = typeof(Program).Assembly.GetName().Version;
+        var formatted = $"{version.Major}.{version.Minor}.{version.Build}";
+        var label = new Label();
+        label.Text = formatted;
+        this.Controls.Add(label);
+
+        this.Resize += (s, e) =>
+        {
+            var height = this.ClientSize.Height;
+            label.Left = DefaultMargin;
+            label.Top = height - DefaultMargin - 12;
+        };
     }
 
     private async Task DoBackgroundWork(CancellationToken cancellationToken)
