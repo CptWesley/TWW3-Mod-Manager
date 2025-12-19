@@ -9,9 +9,6 @@ public sealed class Workshop
 {
     public event WorkshopItemDownloadProgressEventHandler? DownloadProgress;
 
-    public async Task Subscribe(PlaylistMod mod, CancellationToken cancellationToken = default)
-        => await Subscribe(mod.Id, cancellationToken).ConfigureAwait(false);
-
     public async Task Subscribe(ulong mod, CancellationToken cancellationToken = default)
     {
         _ = await GetItemInternal<object?>(
@@ -35,9 +32,6 @@ public sealed class Workshop
             .ConfigureAwait(false);
     }
 
-    public async Task Unsubscribe(PlaylistMod mod, CancellationToken cancellationToken = default)
-    => await Unsubscribe(mod.Id, cancellationToken).ConfigureAwait(false);
-
     public async Task Unsubscribe(ulong mod, CancellationToken cancellationToken = default)
     {
         _ = await GetItemInternal<object?>(
@@ -54,6 +48,12 @@ public sealed class Workshop
             },
             cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    public async Task Resubscribe(ulong mod, CancellationToken cancellationToken = default)
+    {
+        await Unsubscribe(mod, cancellationToken).ConfigureAwait(false);
+        await Subscribe(mod, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<WorkshopInfo?> GetInfo(PlaylistMod mod, CancellationToken cancellationToken = default)

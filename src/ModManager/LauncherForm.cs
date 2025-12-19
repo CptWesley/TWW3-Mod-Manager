@@ -35,6 +35,7 @@ public sealed class LauncherForm : Form
     private readonly Label modUpdated = new();
     private readonly Button modSubscribeButton = new();
     private readonly Button modUnsubscribeButton = new();
+    private readonly Button modResubscribeButton = new();
 
     private readonly Thread backgroundWorker;
 
@@ -619,13 +620,18 @@ public sealed class LauncherForm : Form
         this.Controls.Add(modDescription);
         this.Controls.Add(modSubscribeButton);
         this.Controls.Add(modUnsubscribeButton);
+        this.Controls.Add(modResubscribeButton);
 
         modPicture.SizeMode = PictureBoxSizeMode.StretchImage;
+
         modSubscribeButton.Text = "Subscribe";
         modSubscribeButton.Visible = false;
 
         modUnsubscribeButton.Text = "Unsubscribe";
         modUnsubscribeButton.Visible = false;
+
+        modResubscribeButton.Text = "Resubscribe";
+        modResubscribeButton.Visible = false;
 
         this.Resize += (s, e) =>
         {
@@ -666,6 +672,11 @@ public sealed class LauncherForm : Form
             modUnsubscribeButton.Width = 100;
             modUnsubscribeButton.Height = 30;
             modUnsubscribeButton.Top = modSubscribeButton.Top;
+
+            modResubscribeButton.Left = modUnsubscribeButton.Right + DefaultMargin;
+            modResubscribeButton.Width = 100;
+            modResubscribeButton.Height = 30;
+            modResubscribeButton.Top = modUnsubscribeButton.Top;
         };
 
         usedList.SelectedIndexChanged += (s, e) =>
@@ -687,6 +698,12 @@ public sealed class LauncherForm : Form
         {
             var selected = usedList.SelectedItems[0];
             _ = UnsubscribeFromMods(selected.Annotation.Id);
+        };
+
+        modResubscribeButton.Click += (s, e) =>
+        {
+            var selected = usedList.SelectedItems[0];
+            _ = ResubscribeToMods(selected.Annotation.Id);
         };
     }
 
@@ -720,6 +737,21 @@ public sealed class LauncherForm : Form
         await UpdateModListAsync();
     }
 
+    private async Task ResubscribeToMods(params ulong[] ids)
+    {
+        if (ids.Length <= 0)
+        {
+            return;
+        }
+
+        foreach (var id in ids)
+        {
+            await workshop.Resubscribe(id);
+        }
+
+        await UpdateModListAsync();
+    }
+
     private void ClearModInfo()
     {
         modName.Text = string.Empty;
@@ -731,6 +763,8 @@ public sealed class LauncherForm : Form
         modSubscribeButton.Enabled = false;
         modUnsubscribeButton.Visible = false;
         modUnsubscribeButton.Enabled = false;
+        modResubscribeButton.Visible = false;
+        modResubscribeButton.Enabled = false;
     }
 
     private void SetModInfo(WorkshopInfo mod)
@@ -757,6 +791,10 @@ public sealed class LauncherForm : Form
         modUnsubscribeButton.Visible = true;
         modUnsubscribeButton.Enabled = mod.IsSubscribed;
         modUnsubscribeButton.Top = modSubscribeButton.Top;
+
+        modResubscribeButton.Visible = true;
+        modResubscribeButton.Enabled = mod.IsSubscribed;
+        modResubscribeButton.Top = modSubscribeButton.Top;
     }
 
     private AnnotatedListView<WorkshopInfo>? focusedList = null;
