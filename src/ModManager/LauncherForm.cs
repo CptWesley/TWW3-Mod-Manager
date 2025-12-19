@@ -1,5 +1,4 @@
 using System.Drawing;
-using System.Reflection;
 
 namespace ModManager;
 
@@ -33,6 +32,8 @@ public sealed class LauncherForm : Form
     private readonly Label modDescription = new();
     private readonly Label modCreator = new();
     private readonly Label modUpdated = new();
+    private readonly LinkLabel modUrlSteam = new();
+    private readonly LinkLabel modUrlBrowser = new();
     private readonly Button modSubscribeButton = new();
     private readonly Button modUnsubscribeButton = new();
     private readonly Button modResubscribeButton = new();
@@ -617,6 +618,8 @@ public sealed class LauncherForm : Form
         this.Controls.Add(modPicture);
         this.Controls.Add(modCreator);
         this.Controls.Add(modUpdated);
+        this.Controls.Add(modUrlSteam);
+        this.Controls.Add(modUrlBrowser);
         this.Controls.Add(modDescription);
         this.Controls.Add(modSubscribeButton);
         this.Controls.Add(modUnsubscribeButton);
@@ -632,6 +635,11 @@ public sealed class LauncherForm : Form
 
         modResubscribeButton.Text = "Resubscribe";
         modResubscribeButton.Visible = false;
+
+        modUrlSteam.Text = "Open in Steam";
+        modUrlSteam.Visible = false;
+        modUrlBrowser.Text = "Open in Browser";
+        modUrlBrowser.Visible = false;
 
         this.Resize += (s, e) =>
         {
@@ -658,8 +666,17 @@ public sealed class LauncherForm : Form
             modUpdated.Width = potentialWidth / 2;
             modUpdated.TextAlign = ContentAlignment.TopRight;
 
+            modUrlSteam.Left = modCreator.Left;
+            modUrlSteam.Top = modCreator.Bottom + DefaultMargin;
+            modUrlSteam.Width = potentialWidth / 2;
+
+            modUrlBrowser.Left = modUrlSteam.Right;
+            modUrlBrowser.Top = modUrlSteam.Top;
+            modUrlBrowser.Width = potentialWidth / 2;
+            modUrlBrowser.TextAlign = ContentAlignment.TopRight;
+
             modDescription.Left = modName.Left;
-            modDescription.Top = modCreator.Bottom + DefaultMargin;
+            modDescription.Top = modUrlSteam.Bottom + DefaultMargin;
             modDescription.AutoSize = true;
             modDescription.MaximumSize = new(potentialWidth, potentialHeight);
 
@@ -704,6 +721,19 @@ public sealed class LauncherForm : Form
         {
             var selected = usedList.SelectedItems[0];
             _ = ResubscribeToMods(selected.Annotation.Id);
+        };
+
+        modUrlSteam.LinkClicked += (s, e) =>
+        {
+            var selected = usedList.SelectedItems[0];
+            var url = $"steam://url/CommunityFilePage/{selected.Annotation.Id}";
+            _ = Process.Start(url);
+        };
+        modUrlBrowser.LinkClicked += (s, e) =>
+        {
+            var selected = usedList.SelectedItems[0];
+            var url = $"https://steamcommunity.com/sharedfiles/filedetails/?id={selected.Annotation.Id}";
+            _ = Process.Start(url);
         };
     }
 
@@ -759,6 +789,10 @@ public sealed class LauncherForm : Form
         modPicture.ImageLocation = null;
         modCreator.Text = string.Empty;
         modUpdated.Text = string.Empty;
+        modUrlSteam.Visible = false;
+        modUrlSteam.Enabled = false;
+        modUrlBrowser.Visible = false;
+        modUrlBrowser.Enabled = false;
         modSubscribeButton.Visible = false;
         modSubscribeButton.Enabled = false;
         modUnsubscribeButton.Visible = false;
@@ -783,6 +817,11 @@ public sealed class LauncherForm : Form
 
         modCreator.Text = $"Author: {mod.Owner}";
         modUpdated.Text = $"Last updated: {mod.Updated}";
+
+        modUrlSteam.Visible = true;
+        modUrlSteam.Enabled = true;
+        modUrlBrowser.Visible = true;
+        modUrlBrowser.Enabled = true;
 
         modSubscribeButton.Visible = true;
         modSubscribeButton.Enabled = !mod.IsSubscribed;
