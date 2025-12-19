@@ -29,7 +29,7 @@ public sealed class LauncherForm : Form
 
     private readonly Label modName = new();
     private readonly PictureBox modPicture = new();
-    private readonly Label modDescription = new();
+    private readonly TextBox modDescription = new();
     private readonly Label modCreator = new();
     private readonly Label modUpdated = new();
     private readonly LinkLabel modUrlSteam = new();
@@ -43,6 +43,8 @@ public sealed class LauncherForm : Form
     private readonly CancellationTokenSource cancellationTokenSource = new();
 
     private Playlist playlist = null!;
+
+    private WorkshopInfo? selected;
 
     public LauncherForm(
         GameLauncher launcher,
@@ -641,6 +643,11 @@ public sealed class LauncherForm : Form
         modUrlBrowser.Text = "Open in Browser";
         modUrlBrowser.Visible = false;
 
+        modDescription.ScrollBars = ScrollBars.Vertical;
+        modDescription.Multiline = true;
+        modDescription.WordWrap = true;
+        modDescription.ReadOnly = true;
+
         this.Resize += (s, e) =>
         {
             modName.Left = usedList.Right + DefaultMargin;
@@ -678,7 +685,8 @@ public sealed class LauncherForm : Form
             modDescription.Left = modName.Left;
             modDescription.Top = modUrlSteam.Bottom + DefaultMargin;
             modDescription.AutoSize = true;
-            modDescription.MaximumSize = new(potentialWidth, potentialHeight);
+            modDescription.Width = potentialWidth;
+            modDescription.Height = usedList.Bottom - modDescription.Top;
 
             modSubscribeButton.Left = modName.Left;
             modSubscribeButton.Width = 100;
@@ -707,33 +715,43 @@ public sealed class LauncherForm : Form
 
         modSubscribeButton.Click += (s, e) =>
         {
-            var selected = usedList.SelectedItems[0];
-            _ = SubscribeToMods(selected.Annotation.Id);
+            if (selected is { })
+            {
+                _ = SubscribeToMods(selected.Id);
+            }
         };
 
         modUnsubscribeButton.Click += (s, e) =>
         {
-            var selected = usedList.SelectedItems[0];
-            _ = UnsubscribeFromMods(selected.Annotation.Id);
+            if (selected is { })
+            {
+                _ = UnsubscribeFromMods(selected.Id);
+            }
         };
 
         modResubscribeButton.Click += (s, e) =>
         {
-            var selected = usedList.SelectedItems[0];
-            _ = ResubscribeToMods(selected.Annotation.Id);
+            if (selected is { })
+            {
+                _ = ResubscribeToMods(selected.Id);
+            }
         };
 
         modUrlSteam.LinkClicked += (s, e) =>
         {
-            var selected = usedList.SelectedItems[0];
-            var url = $"steam://url/CommunityFilePage/{selected.Annotation.Id}";
-            _ = Process.Start(url);
+            if (selected is { })
+            {
+                var url = $"steam://url/CommunityFilePage/{selected.Id}";
+                _ = Process.Start(url);
+            }
         };
         modUrlBrowser.LinkClicked += (s, e) =>
         {
-            var selected = usedList.SelectedItems[0];
-            var url = $"https://steamcommunity.com/sharedfiles/filedetails/?id={selected.Annotation.Id}";
-            _ = Process.Start(url);
+            if (selected is { })
+            {
+                var url = $"https://steamcommunity.com/sharedfiles/filedetails/?id={selected.Id}";
+                _ = Process.Start(url);
+            }
         };
     }
 
@@ -855,9 +873,34 @@ public sealed class LauncherForm : Form
         }
         else
         {
-            var selected = focusedList.SelectedItems[0];
-            SetModInfo(selected.Annotation);
+            var curSelected = focusedList.SelectedItems[0].Annotation;
+            _ = SetModInfoAsync(curSelected);
         }
+    }
+
+    private async Task SetModInfoAsync(WorkshopInfo fromList)
+    {
+        var queried = await workshop.GetInfo(fromList.Id).ConfigureAwait(false);
+        var info = queried ?? fromList;
+
+        Delegate(() =>
+        {
+            if (focusedList is null || focusedList.SelectedItems.Count != 1)
+            {
+                return;
+            }
+
+            var curSelected = focusedList.SelectedItems[0].Annotation;
+
+            if (curSelected.Id != info.Id)
+            {
+                return;
+            }
+
+            selected = info;
+
+            SetModInfo(selected);
+        });
     }
 
     private void AddMod(ulong id, int index)
@@ -1073,7 +1116,9 @@ public sealed class LauncherForm : Form
     private async Task UpdateModListAsync(CancellationToken cancellationToken = default)
     {
         Console.WriteLine("Updating subscribed workshop items...");
-        var subscribedMods = await workshop.GetSubscribedItems(cancellationToken).ConfigureAwait(false);
+        var subscribedMods = await workshop
+            .GetSubscribedItems(cancellationToken)
+            .ConfigureAwait(false);
         var unsubscribedModIds = playlist.Mods
             .Where(pm => !subscribedMods.Any(sm => sm.Id == pm.Id))
             .Select(pm => pm.Id)
