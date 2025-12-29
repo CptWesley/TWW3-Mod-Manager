@@ -1,5 +1,7 @@
+using Steamworks;
 using Steamworks.Data;
 using Steamworks.Ugc;
+using System.Collections.Concurrent;
 
 namespace ModManager;
 
@@ -9,8 +11,7 @@ public sealed class Workshop
 {
     public event WorkshopItemDownloadProgressEventHandler? DownloadProgress;
 
-    public async Task Subscribe(PlaylistMod mod, CancellationToken cancellationToken = default)
-        => await Subscribe(mod.Id, cancellationToken).ConfigureAwait(false);
+    private readonly ConcurrentDictionary<ulong, string> playerNames = new();
 
     public async Task Subscribe(ulong mod, CancellationToken cancellationToken = default)
     {
@@ -35,9 +36,6 @@ public sealed class Workshop
             .ConfigureAwait(false);
     }
 
-    public async Task Unsubscribe(PlaylistMod mod, CancellationToken cancellationToken = default)
-    => await Unsubscribe(mod.Id, cancellationToken).ConfigureAwait(false);
-
     public async Task Unsubscribe(ulong mod, CancellationToken cancellationToken = default)
     {
         _ = await GetItemInternal<object?>(
@@ -56,22 +54,49 @@ public sealed class Workshop
             .ConfigureAwait(false);
     }
 
+    public async Task Resubscribe(ulong mod, CancellationToken cancellationToken = default)
+    {
+        await Unsubscribe(mod, cancellationToken).ConfigureAwait(false);
+        await Subscribe(mod, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<WorkshopInfo?> GetInfo(PlaylistMod mod, CancellationToken cancellationToken = default)
         => await GetInfo(mod.Id, cancellationToken).ConfigureAwait(false);
 
     public async Task<WorkshopInfo?> GetInfo(ulong mod, CancellationToken cancellationToken = default)
         => (await GetItems([mod], cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
-    private static WorkshopInfo Convert(Item item)
+    public async Task<string> GetPlayerName(ulong playerId, CancellationToken cancellationToken = default)
+    {
+        if (playerNames.TryGetValue(playerId, out var playerName))
+        {
+            return playerName;
+        }
+
+        var needRequest = SteamFriends.RequestUserInformation(playerId, nameonly: true);
+        var friend = new Friend(playerId);
+
+        if (needRequest)
+        {
+            await friend.RequestInfoAsync();
+        }
+
+        var name = friend.Name;
+        playerNames.TryAdd(playerId, name);
+        return name;
+    }
+
+    private WorkshopInfo Convert(Item item)
         => new ()
         {
             Id = item.Id.Value,
             Name = item.Title,
             Description = item.Description,
+            Directory = item.Directory,
             Image = item.PreviewImageUrl,
             Created = item.Created,
             Updated = item.Updated,
-            Owner = item.Owner.Name,
+            Owner = item.Owner.Id,
             IsSubscribed = item.IsSubscribed,
             IsDownloading = item.IsDownloading || item.IsDownloadPending,
             DownloadProgress = (!item.IsDownloading && !item.IsInstalled) ? 0 : item.DownloadAmount,
@@ -264,7 +289,9 @@ public sealed record WorkshopInfo
 
     public required string Description { get; init; }
 
-    public required string Owner { get; init; }
+    public required string Directory { get; init; }
+
+    public required ulong Owner { get; init; }
 
     public required string Image { get; init; }
 

@@ -1,6 +1,4 @@
 using System.Drawing;
-using System.Threading;
-using System.Xml.Linq;
 
 namespace ModManager;
 
@@ -17,6 +15,7 @@ public sealed class LauncherForm : Form
 
     private readonly Button startButton = new();
     private readonly Button subscribeAllButton = new();
+    private readonly Button resubscribeAllButton = new();
 
     private readonly Button addToPlaylistButton = new();
     private readonly Button removeFromPlaylistButton = new();
@@ -31,17 +30,23 @@ public sealed class LauncherForm : Form
 
     private readonly Label modName = new();
     private readonly PictureBox modPicture = new();
-    private readonly Label modDescription = new();
+    private readonly TextBox modDescription = new();
     private readonly Label modCreator = new();
     private readonly Label modUpdated = new();
+    private readonly LinkLabel modDirectory = new();
+    private readonly LinkLabel modUrlSteam = new();
+    private readonly LinkLabel modUrlBrowser = new();
     private readonly Button modSubscribeButton = new();
     private readonly Button modUnsubscribeButton = new();
+    private readonly Button modResubscribeButton = new();
 
     private readonly Thread backgroundWorker;
 
     private readonly CancellationTokenSource cancellationTokenSource = new();
 
     private Playlist playlist = null!;
+
+    private WorkshopInfo? selected;
 
     public LauncherForm(
         GameLauncher launcher,
@@ -66,7 +71,9 @@ public sealed class LauncherForm : Form
         this.FormClosing += (s, e) => this.cancellationTokenSource.Cancel();
         this.FormClosed += (s, e) => this.cancellationTokenSource.Cancel();
         SetName();
+        SetupVersionLabel();
         SetupStartButton();
+        SetupResubscribeAllButton();
         SetupSubscribeAllButton();
         SetupUnusedList();
         SetupUsedList();
@@ -113,6 +120,31 @@ public sealed class LauncherForm : Form
         };
     }
 
+    private void SetupResubscribeAllButton()
+    {
+        this.Controls.Add(this.resubscribeAllButton);
+        resubscribeAllButton.Enabled = false;
+        resubscribeAllButton.Text = "Resubscribe All";
+        resubscribeAllButton.Width = 100;
+        resubscribeAllButton.Height = 30;
+
+        this.Resize += (s, e) =>
+        {
+            resubscribeAllButton.Top = startButton.Top;
+            resubscribeAllButton.Left = startButton.Left - resubscribeAllButton.Width - DefaultMargin;
+        };
+
+        resubscribeAllButton.Click += (s, e) =>
+        {
+            var ids = usedList
+                .Items
+                .Where(m => m.Checked && m.Annotation.IsSubscribed)
+                .Select(m => m.Annotation.Id)
+                .ToArray();
+            _ = ResubscribeToMods(ids);
+        };
+    }
+
     private void SetupSubscribeAllButton()
     {
         this.Controls.Add(this.subscribeAllButton);
@@ -123,8 +155,8 @@ public sealed class LauncherForm : Form
 
         this.Resize += (s, e) =>
         {
-            subscribeAllButton.Top = startButton.Top;
-            subscribeAllButton.Left = startButton.Left - subscribeAllButton.Width - DefaultMargin;
+            subscribeAllButton.Top = resubscribeAllButton.Top;
+            subscribeAllButton.Left = resubscribeAllButton.Left - resubscribeAllButton.Width - DefaultMargin;
         };
 
         subscribeAllButton.Click += (s, e) =>
@@ -616,16 +648,36 @@ public sealed class LauncherForm : Form
         this.Controls.Add(modPicture);
         this.Controls.Add(modCreator);
         this.Controls.Add(modUpdated);
+        this.Controls.Add(modDirectory);
+        this.Controls.Add(modUrlSteam);
+        this.Controls.Add(modUrlBrowser);
         this.Controls.Add(modDescription);
         this.Controls.Add(modSubscribeButton);
         this.Controls.Add(modUnsubscribeButton);
+        this.Controls.Add(modResubscribeButton);
 
         modPicture.SizeMode = PictureBoxSizeMode.StretchImage;
+
         modSubscribeButton.Text = "Subscribe";
         modSubscribeButton.Visible = false;
 
         modUnsubscribeButton.Text = "Unsubscribe";
         modUnsubscribeButton.Visible = false;
+
+        modResubscribeButton.Text = "Resubscribe";
+        modResubscribeButton.Visible = false;
+
+        modDirectory.Text = "Open in Explorer";
+        modDirectory.Visible = false;
+        modUrlSteam.Text = "Open in Steam";
+        modUrlSteam.Visible = false;
+        modUrlBrowser.Text = "Open in Browser";
+        modUrlBrowser.Visible = false;
+
+        modDescription.ScrollBars = ScrollBars.Vertical;
+        modDescription.Multiline = true;
+        modDescription.WordWrap = true;
+        modDescription.ReadOnly = true;
 
         this.Resize += (s, e) =>
         {
@@ -638,7 +690,7 @@ public sealed class LauncherForm : Form
             modPicture.Left = modName.Left;
             modPicture.Top = modName.Bottom;
 
-            var potentialHeight = usedList.Height / 2;
+            var potentialHeight = usedList.Height / 4;
             var size = Math.Min(potentialWidth, potentialHeight);
             modPicture.Width = size;
             modPicture.Height = size;
@@ -652,10 +704,24 @@ public sealed class LauncherForm : Form
             modUpdated.Width = potentialWidth / 2;
             modUpdated.TextAlign = ContentAlignment.TopRight;
 
+            modDirectory.Left = modCreator.Left;
+            modDirectory.Top = modCreator.Bottom + (DefaultMargin / 2);
+            modDirectory.Width = potentialWidth;
+
+            modUrlSteam.Left = modDirectory.Left;
+            modUrlSteam.Top = modDirectory.Bottom + (DefaultMargin / 2);
+            modUrlSteam.Width = potentialWidth / 2;
+
+            modUrlBrowser.Left = modUrlSteam.Right;
+            modUrlBrowser.Top = modUrlSteam.Top;
+            modUrlBrowser.Width = potentialWidth / 2;
+            modUrlBrowser.TextAlign = ContentAlignment.TopRight;
+
             modDescription.Left = modName.Left;
-            modDescription.Top = modCreator.Bottom + DefaultMargin;
+            modDescription.Top = modUrlSteam.Bottom + (DefaultMargin / 2);
             modDescription.AutoSize = true;
-            modDescription.MaximumSize = new(potentialWidth, potentialHeight);
+            modDescription.Width = potentialWidth;
+            modDescription.Height = usedList.Bottom - modDescription.Top;
 
             modSubscribeButton.Left = modName.Left;
             modSubscribeButton.Width = 100;
@@ -666,23 +732,68 @@ public sealed class LauncherForm : Form
             modUnsubscribeButton.Width = 100;
             modUnsubscribeButton.Height = 30;
             modUnsubscribeButton.Top = modSubscribeButton.Top;
+
+            modResubscribeButton.Left = modUnsubscribeButton.Right + DefaultMargin;
+            modResubscribeButton.Width = 100;
+            modResubscribeButton.Height = 30;
+            modResubscribeButton.Top = modUnsubscribeButton.Top;
         };
 
         usedList.SelectedIndexChanged += (s, e) =>
         {
             UpdateModInfo();
         };
+        unusedList.SelectedIndexChanged += (s, e) =>
+        {
+            UpdateModInfo();
+        };
 
         modSubscribeButton.Click += (s, e) =>
         {
-            var selected = usedList.SelectedItems[0];
-            _ = SubscribeToMods(selected.Annotation.Id);
+            if (selected is { })
+            {
+                _ = SubscribeToMods(selected.Id);
+            }
         };
 
         modUnsubscribeButton.Click += (s, e) =>
         {
-            var selected = usedList.SelectedItems[0];
-            _ = UnsubscribeFromMods(selected.Annotation.Id);
+            if (selected is { })
+            {
+                _ = UnsubscribeFromMods(selected.Id);
+            }
+        };
+
+        modResubscribeButton.Click += (s, e) =>
+        {
+            if (selected is { })
+            {
+                _ = ResubscribeToMods(selected.Id);
+            }
+        };
+
+        modDirectory.LinkClicked += (s, e) =>
+        {
+            if (selected?.Directory is { } dir && Directory.Exists(dir))
+            {
+                _ = Process.Start("explorer.exe", dir);
+            }
+        };
+        modUrlSteam.LinkClicked += (s, e) =>
+        {
+            if (selected is { })
+            {
+                var url = $"steam://url/CommunityFilePage/{selected.Id}";
+                _ = Process.Start(url);
+            }
+        };
+        modUrlBrowser.LinkClicked += (s, e) =>
+        {
+            if (selected is { })
+            {
+                var url = $"https://steamcommunity.com/sharedfiles/filedetails/?id={selected.Id}";
+                _ = Process.Start(url);
+            }
         };
     }
 
@@ -693,11 +804,7 @@ public sealed class LauncherForm : Form
             return;
         }
 
-        foreach (var id in ids)
-        {
-            await workshop.Subscribe(id);
-        }
-
+        await Task.WhenAll(ids.Select(id => workshop.Subscribe(id)).ToArray());
         await UpdateModListAsync();
     }
 
@@ -708,11 +815,18 @@ public sealed class LauncherForm : Form
             return;
         }
 
-        foreach (var id in ids)
+        await Task.WhenAll(ids.Select(id => workshop.Unsubscribe(id)).ToArray());
+        await UpdateModListAsync();
+    }
+
+    private async Task ResubscribeToMods(params ulong[] ids)
+    {
+        if (ids.Length <= 0)
         {
-            await workshop.Unsubscribe(id);
+            return;
         }
 
+        await Task.WhenAll(ids.Select(id => workshop.Resubscribe(id)).ToArray());
         await UpdateModListAsync();
     }
 
@@ -723,13 +837,21 @@ public sealed class LauncherForm : Form
         modPicture.ImageLocation = null;
         modCreator.Text = string.Empty;
         modUpdated.Text = string.Empty;
+        modDirectory.Visible = false;
+        modDirectory.Enabled = false;
+        modUrlSteam.Visible = false;
+        modUrlSteam.Enabled = false;
+        modUrlBrowser.Visible = false;
+        modUrlBrowser.Enabled = false;
         modSubscribeButton.Visible = false;
         modSubscribeButton.Enabled = false;
         modUnsubscribeButton.Visible = false;
         modUnsubscribeButton.Enabled = false;
+        modResubscribeButton.Visible = false;
+        modResubscribeButton.Enabled = false;
     }
 
-    private void SetModInfo(WorkshopInfo mod)
+    private void SetModInfo(WorkshopInfo mod, string ownerName)
     {
         modName.Text = mod.Name;
         modDescription.Text = mod.Description;
@@ -743,8 +865,15 @@ public sealed class LauncherForm : Form
             modPicture.ImageLocation = null;
         }
 
-        modCreator.Text = $"Author: {mod.Owner}";
+        modCreator.Text = $"Author: {ownerName}";
         modUpdated.Text = $"Last updated: {mod.Updated}";
+
+        modDirectory.Visible = !string.IsNullOrWhiteSpace(mod.Directory) && Directory.Exists(mod.Directory);
+        modDirectory.Enabled = modDirectory.Visible;
+        modUrlSteam.Visible = true;
+        modUrlSteam.Enabled = true;
+        modUrlBrowser.Visible = true;
+        modUrlBrowser.Enabled = true;
 
         modSubscribeButton.Visible = true;
         modSubscribeButton.Enabled = !mod.IsSubscribed;
@@ -753,19 +882,61 @@ public sealed class LauncherForm : Form
         modUnsubscribeButton.Visible = true;
         modUnsubscribeButton.Enabled = mod.IsSubscribed;
         modUnsubscribeButton.Top = modSubscribeButton.Top;
+
+        modResubscribeButton.Visible = true;
+        modResubscribeButton.Enabled = mod.IsSubscribed;
+        modResubscribeButton.Top = modSubscribeButton.Top;
     }
+
+    private AnnotatedListView<WorkshopInfo>? focusedList = null;
 
     private void UpdateModInfo()
     {
-        if (usedList.SelectedItems.Count != 1)
+        if (usedList.ContainsFocus)
+        {
+            focusedList = usedList;
+        }
+        else if (unusedList.ContainsFocus)
+        {
+            focusedList = unusedList;
+        }
+
+        if (focusedList is null || focusedList.SelectedItems.Count != 1)
         {
             ClearModInfo();
         }
         else
         {
-            var selected = usedList.SelectedItems[0];
-            SetModInfo(selected.Annotation);
+            var curSelected = focusedList.SelectedItems[0].Annotation;
+            _ = SetModInfoAsync(curSelected);
         }
+    }
+
+    private async Task SetModInfoAsync(WorkshopInfo fromList)
+    {
+        var queried = await workshop.GetInfo(fromList.Id).ConfigureAwait(false);
+        var info = queried ?? fromList;
+
+        var ownerName = await workshop.GetPlayerName(info.Owner).ConfigureAwait(false);
+
+        Delegate(async () =>
+        {
+            if (focusedList is null || focusedList.SelectedItems.Count != 1)
+            {
+                return;
+            }
+
+            var curSelected = focusedList.SelectedItems[0].Annotation;
+
+            if (curSelected.Id != info.Id)
+            {
+                return;
+            }
+
+            selected = info;
+
+            SetModInfo(selected, ownerName);
+        });
     }
 
     private void AddMod(ulong id, int index)
@@ -981,7 +1152,9 @@ public sealed class LauncherForm : Form
     private async Task UpdateModListAsync(CancellationToken cancellationToken = default)
     {
         Console.WriteLine("Updating subscribed workshop items...");
-        var subscribedMods = await workshop.GetSubscribedItems(cancellationToken).ConfigureAwait(false);
+        var subscribedMods = await workshop
+            .GetSubscribedItems(cancellationToken)
+            .ConfigureAwait(false);
         var unsubscribedModIds = playlist.Mods
             .Where(pm => !subscribedMods.Any(sm => sm.Id == pm.Id))
             .Select(pm => pm.Id)
@@ -1111,11 +1284,12 @@ public sealed class LauncherForm : Form
                         Name = id.ToString(),
                         Created = default,
                         Description = string.Empty,
+                        Directory = string.Empty,
                         DownloadProgress = 0,
                         Image = string.Empty,
                         IsDownloading = false,
                         IsSubscribed = false,
-                        Owner = string.Empty,
+                        Owner = 0,
                         Updated = default,
                     };
 
@@ -1158,6 +1332,11 @@ public sealed class LauncherForm : Form
 
             startButton.Enabled = ready;
             subscribeAllButton.Enabled = !ready;
+            resubscribeAllButton.Enabled = usedList
+                .Items
+                .Where(m => m.Checked && m.Annotation.IsSubscribed)
+                .Select(m => m.Annotation.Id)
+                .Any();
             ToggleStatusColumn(showStatus);
 
             usedListLabel.Text = $"Mods in current playlist ({usedList.Items.Count})";
@@ -1191,6 +1370,22 @@ public sealed class LauncherForm : Form
         var name = "CptWesley's Total War Warhammer III Mod Manager";
         this.Text = name;
         this.Name = name;
+    }
+
+    private void SetupVersionLabel()
+    {
+        var version = typeof(Program).Assembly.GetName().Version;
+        var formatted = $"{version.Major}.{version.Minor}.{version.Build}";
+        var label = new Label();
+        label.Text = formatted;
+        this.Controls.Add(label);
+
+        this.Resize += (s, e) =>
+        {
+            var height = this.ClientSize.Height;
+            label.Left = DefaultMargin;
+            label.Top = height - DefaultMargin - 12;
+        };
     }
 
     private async Task DoBackgroundWork(CancellationToken cancellationToken)

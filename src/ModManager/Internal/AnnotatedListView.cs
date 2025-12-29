@@ -23,6 +23,12 @@ internal sealed class AnnotatedListView<T> : ListView
         set => base.TopItem = value;
     }
 
+    public new AnnotatedListViewItem<T> FocusedItem
+    {
+        get => (AnnotatedListViewItem<T>)base.FocusedItem;
+        set => base.FocusedItem = value;
+    }
+
     public new AnnotatedListViewItem<T> GetItemAt(int x, int y)
         => (AnnotatedListViewItem<T>)base.GetItemAt(x, y);
 }
