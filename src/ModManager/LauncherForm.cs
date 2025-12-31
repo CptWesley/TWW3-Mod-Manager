@@ -191,26 +191,41 @@ public sealed class LauncherForm : Form
             unusedList.Height = height - (10 * DefaultMargin);
 
             label.Width = unusedList.Width;
+
+            unusedList.Columns[^1].Width = -2;
         };
 
         unusedList.View = View.Details;
         unusedList.AutoArrange = false;
         unusedList.FullRowSelect = true;
+        unusedList.Columns.Add(new ColumnHeader() { Text = "Updated", Width = 70 });
         unusedList.Columns.Add(new ColumnHeader() { Text = "Name", Width = -2 });
 
         unusedList.ColumnWidthChanging += (s, e) =>
         {
+            if (e.ColumnIndex == unusedList.Columns.Count - 1)
+            {
+                e.NewWidth = -2;
+                e.Cancel = true;
+                return;
+            }
+            
+            if (isResizingColumns)
+            {
+                return;
+            }
+
             e.NewWidth = unusedList.Columns[e.ColumnIndex].Width;
             e.Cancel = true;
         };
     }
 
     private bool isBuildingUsedList = false;
-    private bool isTogglingStatusColumn = false;
+    private bool isResizingColumns = false;
 
     private void ToggleStatusColumn(bool enabled)
     {
-        var column = usedList.Columns[1];
+        var column = usedList.Columns[2];
         var newWidth = enabled ? 90 : 0;
 
         if (column.Width == newWidth)
@@ -218,9 +233,9 @@ public sealed class LauncherForm : Form
             return;
         }
 
-        isTogglingStatusColumn = true;
+        isResizingColumns = true;
         column.Width = newWidth;
-        isTogglingStatusColumn = false;
+        isResizingColumns = false;
     }
 
     private void SetupUsedList()
@@ -247,13 +262,16 @@ public sealed class LauncherForm : Form
 
             usedList.Left = label.Left;
             usedList.Top = label.Bottom;
+
+            usedList.Columns[^1].Width = -2;
         };
 
         usedList.CheckBoxes = true;
         usedList.View = View.Details;
         usedList.AutoArrange = false;
         usedList.FullRowSelect = true;
-        usedList.Columns.Add(new ColumnHeader() { Text = "Enabled", Width = 60 });
+        usedList.Columns.Add(new ColumnHeader() { Text = "Enabled", Width = 55 });
+        usedList.Columns.Add(new ColumnHeader() { Text = "Updated", Width = 70 });
         usedList.Columns.Add(new ColumnHeader() { Text = "Status", Width = 0 });
         usedList.Columns.Add(new ColumnHeader() { Text = "Name", Width = -2 });
 
@@ -358,7 +376,14 @@ public sealed class LauncherForm : Form
 
         usedList.ColumnWidthChanging += (s, e) =>
         {
-            if (!isTogglingStatusColumn)
+            if (e.ColumnIndex == usedList.Columns.Count - 1)
+            {
+                e.NewWidth = -2;
+                e.Cancel = true;
+                return;
+            }
+
+            if (isResizingColumns)
             {
                 return;
             }
@@ -1203,7 +1228,8 @@ public sealed class LauncherForm : Form
                         var oldItem = unusedList.Items
                             .AsEnumerable()
                             .First(row => row.Annotation.Id == item.Id);
-                        oldItem.SubItems[0].Text = item.Name;
+                        oldItem.SubItems[0].Text = item.Updated.ToShortDateString();
+                        oldItem.SubItems[1].Text = item.Name;
                     }
                 }
             }
@@ -1220,10 +1246,10 @@ public sealed class LauncherForm : Form
                 var mod = pair.Value;
                 var index = unusedList.Items
                     .AsEnumerable()
-                    .Select(static item => item.SubItems[0].Text)
+                    .Select(static item => item.SubItems[1].Text)
                     .TakeWhile(listItem => listItem.CompareTo(mod.Name) < 0)
                     .Count();
-                unusedList.Items.Insert(index, new(mod, mod.Name));
+                unusedList.Items.Insert(index, new(mod, mod.Updated.ToShortDateString(), mod.Name));
             }
 
             if (unusedList.Items.Count > 0)
@@ -1305,16 +1331,19 @@ public sealed class LauncherForm : Form
                     ready = false;
                 }
 
+                var lastUpdate = info.Updated.ToShortDateString();
+
                 if (!idToListView.TryGetValue(id, out var item))
                 {
-                    item = new(info, string.Empty, status, info.Name);
+                    item = new(info, string.Empty, lastUpdate, status, info.Name);
                     usedList.Items.Add(item);
                 }
                 else
                 {
                     item.Annotation = info;
-                    item.SubItems[1].Text = status;
-                    item.SubItems[2].Text = info.Name;
+                    item.SubItems[1].Text = lastUpdate;
+                    item.SubItems[2].Text = status;
+                    item.SubItems[3].Text = info.Name;
                 }
 
                 item.Checked = entry.Value.Mod.Enabled;
