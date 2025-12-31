@@ -914,7 +914,7 @@ public sealed class LauncherForm : Form
 
     private async Task SetModInfoAsync(WorkshopInfo fromList)
     {
-        var queried = await workshop.GetInfo(fromList.Id).ConfigureAwait(false);
+        var queried = await workshop.GetInfo(fromList.Id, fromCache: true).ConfigureAwait(false);
         var info = queried ?? fromList;
 
         var ownerName = await workshop.GetPlayerName(info.Owner).ConfigureAwait(false);
