@@ -12,6 +12,7 @@ public sealed class Workshop
     public event WorkshopItemDownloadProgressEventHandler? DownloadProgress;
 
     private readonly ConcurrentDictionary<ulong, string> playerNames = new();
+    private readonly ConcurrentDictionary<ulong, WorkshopInfo> cache = new();
 
     public async Task Subscribe(ulong mod, CancellationToken cancellationToken = default)
     {
@@ -63,8 +64,14 @@ public sealed class Workshop
     public async Task<WorkshopInfo?> GetInfo(PlaylistMod mod, CancellationToken cancellationToken = default)
         => await GetInfo(mod.Id, cancellationToken).ConfigureAwait(false);
 
+    public async Task<WorkshopInfo?> GetInfo(PlaylistMod mod, bool fromCache, CancellationToken cancellationToken = default)
+        => await GetInfo(mod.Id, fromCache, cancellationToken).ConfigureAwait(false);
+
     public async Task<WorkshopInfo?> GetInfo(ulong mod, CancellationToken cancellationToken = default)
-        => (await GetItems([mod], cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+        => (await GetItems([mod], fromCache: false, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
+
+    public async Task<WorkshopInfo?> GetInfo(ulong mod, bool fromCache, CancellationToken cancellationToken = default)
+        => (await GetItems([mod], fromCache, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
     public async Task<string> GetPlayerName(ulong playerId, CancellationToken cancellationToken = default)
     {
@@ -119,16 +126,64 @@ public sealed class Workshop
         return result;
     }
 
-    public async Task<ImmutableArray<WorkshopInfo>> GetItems(IEnumerable<ulong> ids, CancellationToken cancellationToken = default)
+    public async Task<ImmutableArray<WorkshopInfo>> GetItems(
+        IEnumerable<ulong> ids,
+        CancellationToken cancellationToken = default)
+        => await GetItems(ids: ids, fromCache: false, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+    public async Task<ImmutableArray<WorkshopInfo>> GetItems(
+        IEnumerable<ulong> ids,
+        bool fromCache,
+        CancellationToken cancellationToken = default)
     {
-        var result = (await GetItemsInternal(
-                ids: ids,
+        var cached = GetFromCache(ids, fromCache);
+        var nonCachedIds = ids.Where(id => !cached.ContainsKey(id)).ToArray();
+
+        if (nonCachedIds.Length <= 0)
+        {
+            return cached.Select(x => x.Value).ToImmutableArray();
+        }
+
+        var queried = (await GetItemsInternal(
+                ids: nonCachedIds,
                 map: items => Task.FromResult(items.Select(Convert).ToImmutableArray()),
                 cancellationToken: cancellationToken)
                 .ConfigureAwait(false))
             .OrderBy(static item => item.Name)
             .ThenBy(static item => item.Id)
             .ToImmutableArray();
+
+        foreach (var item in queried)
+        {
+            cache.TryAdd(item.Id, item);
+        }
+
+        if (cached.Count <= 0)
+        {
+            return queried;
+        }
+
+        var result = queried.Concat(cached.Values).ToImmutableArray();
+        return result;
+    }
+
+    private Dictionary<ulong, WorkshopInfo> GetFromCache(IEnumerable<ulong> ids, bool fromCache)
+    {
+        var result = new Dictionary<ulong, WorkshopInfo>();
+
+        if (!fromCache)
+        {
+            return result;
+        }
+
+        foreach (var id in ids)
+        {
+            if (cache.TryGetValue(id, out var cached))
+            {
+                result[id] = cached;
+            }
+        }
+
         return result;
     }
 
