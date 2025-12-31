@@ -1,6 +1,6 @@
 namespace ModManager;
 
-public sealed class UsedMods(GameDirectoryLocator gameLocator)
+public sealed class UsedMods(GameDirectoryLocator gameLocator, Workshop workshop)
 {
     private static readonly Regex WorkingDirectoryRegex = new(@"add_working_directory ""([^""]*)"";", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -28,9 +28,7 @@ public sealed class UsedMods(GameDirectoryLocator gameLocator)
 
                 var dir = Path.GetFullPath(match.Groups[1].Value);
 
-                if (!Directory.Exists(dir)
-                 || dir.Length <= gameLocator.WorkshopContentPath!.Length
-                 || !dir.StartsWith(gameLocator.WorkshopContentPath))
+                if (!Directory.Exists(dir))
                 {
                     continue;
                 }
@@ -63,12 +61,36 @@ public sealed class UsedMods(GameDirectoryLocator gameLocator)
 
         var packs = new List<string>();
 
+        var subscribed = workshop.GetSubscribedItems().GetAwaiter().GetResult()
+            .ToDictionary(x => x.Id, x => x.Directory);
+
         foreach (var mod in playlist.Mods.Where(static m => m.Enabled))
         {
-            var modDir = Path.Combine(gameLocator.WorkshopContentPath, mod.Id.ToString());
+            if (!subscribed.TryGetValue(mod.Id, out var modDir) || !Directory.Exists(modDir) || true)
+            {
+                var workshopDir = subscribed
+                    .Select(static x => Path.GetDirectoryName(x.Value))
+                    .Where(static x => Directory.Exists(x))
+                    .FirstOrDefault();
+
+                if (!Directory.Exists(workshopDir))
+                {
+                    modDir = null;
+                }
+                else
+                {
+                    modDir = Path.Combine(workshopDir, mod.Id.ToString());
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(modDir) || !Directory.Exists(modDir))
+            {
+                modDir = Path.Combine(gameLocator.WorkshopContentPath, mod.Id.ToString());
+            }
 
             if (!Directory.Exists(modDir))
             {
+                Console.Error.WriteLine($"Couldn't find mod directory of '{mod.Id}'.");
                 continue;
             }
 
@@ -78,6 +100,10 @@ public sealed class UsedMods(GameDirectoryLocator gameLocator)
             {
                 packs.AddRange(modPacks.Select(x => Path.GetFileName(x)));
                 sb.AppendLine($"add_working_directory \"{modDir}\";");
+            }
+            else
+            {
+                Console.Error.WriteLine($"Couldn't find single .pack file in directory '{modDir}'.");
             }
         }
 

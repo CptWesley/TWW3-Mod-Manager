@@ -15,9 +15,23 @@ public static class Program
         SteamClient.Init(Constants.GameId);
 
         var services = BuildServiceContainer();
-        var form = services.GetRequiredService<LauncherForm>();
+        var locator = services.GetRequiredService<GameDirectoryLocator>();
 
-        Application.Run(form);
+        if (string.IsNullOrEmpty(locator.GamePath) || !Directory.Exists(locator.GamePath))
+        {
+            Console.Error.WriteLine("Couldn't find game directory.");
+            MessageBox.Show(
+                text: "Could not find game directory.",
+                caption: "Could not find game directory",
+                buttons: MessageBoxButtons.OK,
+                icon: MessageBoxIcon.Error);
+        }
+        else
+        {
+            var form = services.GetRequiredService<LauncherForm>();
+            Application.Run(form);
+        }
+
         SteamClient.Shutdown();
     }
 

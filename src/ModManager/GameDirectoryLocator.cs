@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using Steamworks;
 
 namespace ModManager;
 
@@ -20,11 +21,36 @@ public sealed class GameDirectoryLocator
             return null;
         }
 
-        return Path.GetFullPath(Path.Combine(gamePath, $"../../workshop/content/{Constants.GameId}"));
+        try
+        {
+            if (Path.GetFullPath(Path.Combine(gamePath, $"../../workshop/content/{Constants.GameId}")) is { Length: > 0 } workshopDir)
+            {
+                Directory.CreateDirectory(workshopDir);
+                return workshopDir;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex);
+        }
+
+        return null;
     }
 
     private static string? GetGamePathInternal()
     {
+        try
+        {
+            if (SteamApps.AppInstallDir(Constants.GameId) is { } fromSteamworks)
+            {
+                return fromSteamworks;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex);
+        }
+
         foreach (var library in GetSteamLibraryPaths())
         {
             var dir = Path.Combine(library, Constants.GameDirectoryName);
